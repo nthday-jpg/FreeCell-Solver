@@ -24,10 +24,13 @@ def microsoft_shuffled_deck(deal_number: int) -> tuple[Card, ...]:
 	if deal_number < 0:
 		raise ValueError("deal_number must be non-negative")
 
-	deck = list(standard_deck())
-	for idx, rand_value in zip(range(len(deck) - 1, -1, -1), _microsoft_rand_stream(deal_number)):
-		swap_idx = rand_value % (idx + 1)
-		deck[idx], deck[swap_idx] = deck[swap_idx], deck[idx]
+	# Match the canonical mapping used by Microsoft deals:
+	# c -> rank = c // 4 + 1, suit = "CDHS"[c % 4], starting from c=51 down to 0.
+	suits = ("C", "D", "H", "S")
+	deck = [Card(rank=(value // 4) + 1, suit=suits[value % 4]) for value in range(51, -1, -1)]
+	for i, rand_value in zip(range(len(deck)), _microsoft_rand_stream(deal_number)):
+		swap_idx = (len(deck) - 1) - (rand_value % (len(deck) - i))
+		deck[i], deck[swap_idx] = deck[swap_idx], deck[i]
 	return tuple(deck)
 
 
@@ -42,16 +45,19 @@ def shuffled_deck(seed: int | None = None) -> tuple[Card, ...]:
 def deal_cascades(
 	seed: int | None = None,
 	deck: Sequence[Card] | None = None,
-	num_cascades: int = 8,
 ) -> tuple[tuple[Card, ...], ...]:
-	if num_cascades <= 0:
-		raise ValueError("num_cascades must be positive")
+    """
+        Return:
+		    A tuple of 8 tuples, first 4 tuples contain 7 cards
+			and the last 4 contain 6 cards
+    """
+    num_cascades = 8 # 8 columns
 
-	cards = tuple(deck) if deck is not None else shuffled_deck(seed=seed)
-	if len(cards) != 52:
-		raise ValueError(f"FreeCell requires 52 cards, got {len(cards)}")
+    cards = tuple(deck) if deck is not None else shuffled_deck(seed=seed)
+    if len(cards) != 52:
+        raise ValueError(f"FreeCell requires 52 cards, got {len(cards)}")
 
-	cascades: list[list[Card]] = [[] for _ in range(num_cascades)]
-	for idx, card in enumerate(cards):
-		cascades[idx % num_cascades].append(card)
-	return tuple(tuple(cascade) for cascade in cascades)
+    cascades: list[list[Card]] = [[] for _ in range(num_cascades)]
+    for idx, card in enumerate(cards):
+        cascades[idx % num_cascades].append(card)
+    return tuple(tuple(cascade) for cascade in cascades)
