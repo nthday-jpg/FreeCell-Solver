@@ -1,3 +1,5 @@
+# Ref: https://rosettacode.org/wiki/Deal_cards_for_FreeCell#Python
+
 from random import Random
 from typing import Sequence
 
