@@ -177,7 +177,9 @@ class PackedState:
         if count > length:
             raise ValueError("count exceeds cascade length")
         start = length - count
-        return tuple(self.cascade_card_code(cascade_index, position) for position in range(start, length))
+        # Extract tail as one bit window, then decode each card code in order.
+        tail_bits = self.cascade_words[cascade_index] >> (start * _CARD_BITS)
+        return tuple((tail_bits >> (offset * _CARD_BITS)) & _CARD_MASK for offset in range(count))
 
     def cascade_count_empty(self) -> int:
         return sum(1 for index in range(_CASCADE_COUNT) if self.cascade_length(index) == 0)

@@ -76,6 +76,10 @@ _CODE_TO_CARD: tuple[Card, ...] = tuple(
 	Card(rank=(code >> 2) + 1, suit=INDEX_TO_SUIT[code & 0b11]) for code in range(CARD_CODE_COUNT)
 )
 
+CARD_CODE_RANK: tuple[int, ...] = tuple((code >> 2) + 1 for code in range(CARD_CODE_COUNT))
+CARD_CODE_SUIT_INDEX: tuple[int, ...] = tuple(code & 0b11 for code in range(CARD_CODE_COUNT))
+CARD_CODE_IS_RED: tuple[bool, ...] = tuple((code & 0b11) in (1, 2) for code in range(CARD_CODE_COUNT))
+
 
 def code_to_card(code: int) -> Card:
 	if code < 0 or code >= CARD_CODE_COUNT:
@@ -86,16 +90,16 @@ def code_to_card(code: int) -> Card:
 def card_code_rank(code: int) -> int:
 	if code < 0 or code >= CARD_CODE_COUNT:
 		raise ValueError(f"Invalid packed card code: {code}")
-	return (code >> 2) + 1
+	return CARD_CODE_RANK[code]
 
 
 def card_code_suit_index(code: int) -> int:
 	if code < 0 or code >= CARD_CODE_COUNT:
 		raise ValueError(f"Invalid packed card code: {code}")
-	return code & 0b11
+	return CARD_CODE_SUIT_INDEX[code]
 
 
 def card_code_is_red(code: int) -> bool:
-	# Suit indices follow CDHS, so D=1 and H=2 are red.
-	suit_index = card_code_suit_index(code)
-	return suit_index in (1, 2)
+	if code < 0 or code >= CARD_CODE_COUNT:
+		raise ValueError(f"Invalid packed card code: {code}")
+	return CARD_CODE_IS_RED[code]
