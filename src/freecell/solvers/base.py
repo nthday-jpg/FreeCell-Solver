@@ -30,6 +30,14 @@ class SolveResult:
 	def move_count(self) -> int:
 		return len(self.moves)
 
+	def __str__(self) -> str:
+		return (
+			f"SolveResult(solved={self.solved}, "
+			f"move_count={self.move_count}, "
+			f"expanded_nodes={self.expanded_nodes}, "
+			f"elapsed_seconds={self.elapsed_seconds:.3f}, "
+			f"peak_memory_mb={self.peak_memory_usage / (1024 * 1024):.2f})"
+		)
 
 class BaseSolver(ABC):
 	@abstractmethod
