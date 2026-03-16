@@ -1,4 +1,5 @@
 from .card import Card
+from .card import card_code_is_red, card_code_rank
 
 
 def is_descending_alternating(cards: tuple[Card, ...]) -> bool:
@@ -22,6 +23,29 @@ def can_stack_on_cascade(moving: Card, destination_top: Card | None) -> bool:
 
 def can_move_to_foundation(card: Card, current_rank: int) -> bool:
 	return card.rank == current_rank + 1
+
+
+def is_descending_alternating_codes(card_codes: tuple[int, ...]) -> bool:
+	if len(card_codes) <= 1:
+		return True
+	for lower_code, upper_code in zip(card_codes, card_codes[1:]):
+		if card_code_rank(lower_code) != card_code_rank(upper_code) + 1:
+			return False
+		if card_code_is_red(lower_code) == card_code_is_red(upper_code):
+			return False
+	return True
+
+
+def can_stack_on_cascade_code(moving_code: int, destination_top_code: int | None) -> bool:
+	if destination_top_code is None:
+		return True
+	if card_code_is_red(moving_code) == card_code_is_red(destination_top_code):
+		return False
+	return card_code_rank(moving_code) + 1 == card_code_rank(destination_top_code)
+
+
+def can_move_to_foundation_code(card_code: int, current_rank: int) -> bool:
+	return card_code_rank(card_code) == current_rank + 1
 
 
 def max_movable_cards(empty_freecells: int, empty_cascades: int) -> int:

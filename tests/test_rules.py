@@ -10,10 +10,14 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from freecell.core.card import Card
+from freecell.core.card import card_to_code
 from freecell.core.rules import (
     can_move_to_foundation,
+    can_move_to_foundation_code,
     can_stack_on_cascade,
+    can_stack_on_cascade_code,
     is_descending_alternating,
+    is_descending_alternating_codes,
     max_movable_cards,
 )
 
@@ -40,6 +44,19 @@ class RulesTests(unittest.TestCase):
         stack = (Card.from_short_name("KC"), Card.from_short_name("QS"))
         self.assertFalse(is_descending_alternating(stack))
 
+    def test_is_descending_alternating_codes_accepts_and_rejects_sequences(self) -> None:
+        good_stack = (
+            card_to_code(Card.from_short_name("KC")),
+            card_to_code(Card.from_short_name("QH")),
+            card_to_code(Card.from_short_name("JS")),
+        )
+        bad_stack = (
+            card_to_code(Card.from_short_name("KC")),
+            card_to_code(Card.from_short_name("QS")),
+        )
+        self.assertTrue(is_descending_alternating_codes(good_stack))
+        self.assertFalse(is_descending_alternating_codes(bad_stack))
+
     def test_can_stack_on_cascade_accepts_empty_destination(self) -> None:
         self.assertTrue(can_stack_on_cascade(Card.from_short_name("7D"), None))
 
@@ -58,10 +75,23 @@ class RulesTests(unittest.TestCase):
         destination_top = Card.from_short_name("8C")
         self.assertTrue(can_stack_on_cascade(moving, destination_top))
 
+    def test_can_stack_on_cascade_code(self) -> None:
+        moving_code = card_to_code(Card.from_short_name("7D"))
+        valid_destination_code = card_to_code(Card.from_short_name("8C"))
+        invalid_destination_code = card_to_code(Card.from_short_name("8H"))
+        self.assertTrue(can_stack_on_cascade_code(moving_code, valid_destination_code))
+        self.assertFalse(can_stack_on_cascade_code(moving_code, invalid_destination_code))
+        self.assertTrue(can_stack_on_cascade_code(moving_code, None))
+
     def test_can_move_to_foundation(self) -> None:
         self.assertTrue(can_move_to_foundation(Card.from_short_name("AD"), current_rank=0))
         self.assertTrue(can_move_to_foundation(Card.from_short_name("7D"), current_rank=6))
         self.assertFalse(can_move_to_foundation(Card.from_short_name("7D"), current_rank=5))
+
+    def test_can_move_to_foundation_code(self) -> None:
+        self.assertTrue(can_move_to_foundation_code(card_to_code(Card.from_short_name("AD")), current_rank=0))
+        self.assertTrue(can_move_to_foundation_code(card_to_code(Card.from_short_name("7D")), current_rank=6))
+        self.assertFalse(can_move_to_foundation_code(card_to_code(Card.from_short_name("7D")), current_rank=5))
 
     def test_max_movable_cards(self) -> None:
         self.assertEqual(max_movable_cards(empty_freecells=0, empty_cascades=0), 1)
