@@ -3,12 +3,7 @@ from typing import Literal
 
 from .card import Card, SUIT_TO_INDEX, SUITS
 from .deal_generator import deal_cascades
-from .rules import (
-    can_move_to_foundation,
-    can_stack_on_cascade,
-    is_descending_alternating,
-    max_movable_cards,
-)
+from .packed_state import PackedState
 
 PileType = Literal["cascade", "freecell", "foundation"]
 
@@ -31,10 +26,17 @@ class GameState:
     @classmethod
     def initial(cls, seed: int | None = None) -> "GameState":
         return cls(cascades=deal_cascades(seed=seed))
+
+    def to_packed(self) -> PackedState:
+        return PackedState.from_game_state(self)
+
+    @classmethod
+    def from_packed(cls, packed_state: PackedState) -> "GameState":
+        return packed_state.to_game_state()
     
     @property
     def is_victory(self) -> bool:
-        return self.foundation_complete()
+        return self.to_packed().is_victory
 
     @property
     def cards_in_foundation(self) -> int:
@@ -63,151 +65,25 @@ class GameState:
         return cascade[-1] if cascade else None
 
     def move_cascade_to_freecell(self, cascade_index: int, freecell_index: int) -> "GameState":
-        source = self.cascades[cascade_index]
-        if not source:
-            raise ValueError("Source cascade is empty")
-        if self.freecells[freecell_index] is not None:
-            raise ValueError("Destination freecell is occupied")
-
-        card = source[-1]
-        new_cascades = list(self.cascades)
-        new_cascades[cascade_index] = source[:-1]
-        new_freecells = list(self.freecells)
-        new_freecells[freecell_index] = card
-        return GameState(
-            cascades=tuple(new_cascades),
-            freecells=tuple(new_freecells),
-            foundations=self.foundations,
-        )
+        return self.to_packed().move_cascade_to_freecell(cascade_index, freecell_index).to_game_state()
 
     def move_freecell_to_cascade(self, freecell_index: int, cascade_index: int) -> "GameState":
-        card = self.freecells[freecell_index]
-        if card is None:
-            raise ValueError("Source freecell is empty")
-
-        destination = self.cascades[cascade_index]
-        dest_top = destination[-1] if destination else None
-        if not can_stack_on_cascade(card, dest_top):
-            raise ValueError("Illegal placement on cascade")
-
-        new_freecells = list(self.freecells)
-        new_freecells[freecell_index] = None
-        new_cascades = list(self.cascades)
-        new_cascades[cascade_index] = destination + (card,)
-        return GameState(
-            cascades=tuple(new_cascades),
-            freecells=tuple(new_freecells),
-            foundations=self.foundations,
-        )
+        return self.to_packed().move_freecell_to_cascade(freecell_index, cascade_index).to_game_state()
 
     def move_cascade_to_foundation(self, cascade_index: int) -> "GameState":
-        source = self.cascades[cascade_index]
-        if not source:
-            raise ValueError("Source cascade is empty")
-        card = source[-1]
-        suit_idx = SUIT_TO_INDEX[card.suit]
-        current_rank = self.foundations[suit_idx]
-        if not can_move_to_foundation(card, current_rank):
-            raise ValueError("Card cannot be moved to foundation")
-
-        new_cascades = list(self.cascades)
-        new_cascades[cascade_index] = source[:-1]
-        new_foundations = list(self.foundations)
-        new_foundations[suit_idx] = card.rank
-        foundations = (
-            new_foundations[0],
-            new_foundations[1],
-            new_foundations[2],
-            new_foundations[3],
-        )
-        return GameState(
-            cascades=tuple(new_cascades),
-            freecells=self.freecells,
-            foundations=foundations,
-        )
+        return self.to_packed().move_cascade_to_foundation(cascade_index).to_game_state()
 
     def move_freecell_to_foundation(self, freecell_index: int) -> "GameState":
-        card = self.freecells[freecell_index]
-        if card is None:
-            raise ValueError("Source freecell is empty")
-
-        suit_idx = SUIT_TO_INDEX[card.suit]
-        current_rank = self.foundations[suit_idx]
-        if not can_move_to_foundation(card, current_rank):
-            raise ValueError("Card cannot be moved to foundation")
-
-        new_freecells = list(self.freecells)
-        new_freecells[freecell_index] = None
-        new_foundations = list(self.foundations)
-        new_foundations[suit_idx] = card.rank
-        foundations = (
-            new_foundations[0],
-            new_foundations[1],
-            new_foundations[2],
-            new_foundations[3],
-        )
-        return GameState(
-            cascades=self.cascades,
-            freecells=tuple(new_freecells),
-            foundations=foundations,
-        )
+        return self.to_packed().move_freecell_to_foundation(freecell_index).to_game_state()
 
     def move_cascade_to_cascade(self, source_index: int, destination_index: int, count: int = 1) -> "GameState":
-        if count <= 0:
-            raise ValueError("count must be positive")
-        if source_index == destination_index:
-            raise ValueError("Source and destination cascades must differ")
-
-        source = self.cascades[source_index]
-        destination = self.cascades[destination_index]
-        if len(source) < count:
-            raise ValueError("Source cascade does not contain enough cards")
-
-        moving_stack = source[-count:]
-        if not is_descending_alternating(moving_stack):
-            raise ValueError("Moving stack is not in descending alternating order")
-
-        destination_is_empty = len(destination) == 0
-        auxiliary_empty_cascades = self.empty_cascade_count() - (1 if destination_is_empty else 0)
-        allowed = max_movable_cards(self.empty_freecell_count(), auxiliary_empty_cascades)
-        if count > allowed:
-            raise ValueError(f"Cannot move {count} cards with current free space (max {allowed})")
-
-        if not can_stack_on_cascade(moving_stack[0], destination[-1] if destination else None):
-            raise ValueError("Illegal placement on destination cascade")
-
-        new_cascades = list(self.cascades)
-        new_cascades[source_index] = source[:-count]
-        new_cascades[destination_index] = destination + moving_stack
-        return GameState(
-            cascades=tuple(new_cascades),
-            freecells=self.freecells,
-            foundations=self.foundations,
-        )
+        return self.to_packed().move_cascade_to_cascade(source_index, destination_index, count=count).to_game_state()
 
     def apply_move(self, move: Move) -> "GameState":
-        if move.source == "cascade" and move.destination == "cascade":
-            return self.move_cascade_to_cascade(move.source_index, move.destination_index, count=move.count)
-        if move.source == "cascade" and move.destination == "freecell":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to freecell")
-            return self.move_cascade_to_freecell(move.source_index, move.destination_index)
-        if move.source == "freecell" and move.destination == "cascade":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved from freecell")
-            return self.move_freecell_to_cascade(move.source_index, move.destination_index)
-        if move.source == "cascade" and move.destination == "foundation":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to foundation")
-            return self.move_cascade_to_foundation(move.source_index)
-        if move.source == "freecell" and move.destination == "foundation":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to foundation")
-            return self.move_freecell_to_foundation(move.source_index)
-        raise ValueError(f"Unsupported move: {move}")
+        return self.to_packed().apply_move(move).to_game_state()
 
     def foundation_complete(self) -> bool:
-        return self.foundations == (13, 13, 13, 13)
+        return self.to_packed().is_victory
 
     def foundation_summary(self) -> dict[str, int]:
         return {suit: self.foundations[idx] for idx, suit in enumerate(SUITS)}
