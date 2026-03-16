@@ -136,6 +136,8 @@ class BaseSolver(ABC):
 					)
 
 	def _cascade_to_cascade_moves(self, state: PackedState) -> Iterator[Move]:
+		empty_cascades_total = state.cascade_count_empty()
+		empty_freecells_total = state.freecell_count_empty()
 		for source_index in range(state.cascade_count):
 			source_len = state.cascade_length(source_index)
 			if source_len == 0:
@@ -146,10 +148,10 @@ class BaseSolver(ABC):
 
 				destination_len = state.cascade_length(destination_index)
 				destination_is_empty = destination_len == 0
-				auxiliary_empty_cascades = state.cascade_count_empty() - (1 if destination_is_empty else 0)
+				auxiliary_empty_cascades = empty_cascades_total - (1 if destination_is_empty else 0)
 				max_count = min(
 					source_len,
-					max_movable_cards(state.freecell_count_empty(), auxiliary_empty_cascades),
+					max_movable_cards(empty_freecells_total, auxiliary_empty_cascades),
 				)
 
 				for count in range(1, max_count + 1):
