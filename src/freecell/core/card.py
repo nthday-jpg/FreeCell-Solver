@@ -2,6 +2,9 @@ from dataclasses import dataclass
 
 SUITS: tuple[str, ...] = ("C", "D", "H", "S")
 SUIT_TO_INDEX: dict[str, int] = {suit: idx for idx, suit in enumerate(SUITS)}
+INDEX_TO_SUIT: tuple[str, ...] = SUITS
+CARD_CODE_COUNT = 52
+EMPTY_CARD_CODE = 63 # Represents an empty slot in freecells
 
 RANK_TO_NAME: dict[int, str] = {
 	1: "A",
@@ -57,3 +60,42 @@ class Card:
 
 def standard_deck() -> tuple[Card, ...]:
 	return tuple(Card(rank=rank, suit=suit) for suit in SUITS for rank in range(1, 14))
+
+
+"""
+	Card encoding, decoding:
+		card_id = (rank - 1) * 4 + suit_index
+		rank = floor (card_id/4) + 1
+		suit_idx = card_id % 4
+"""	
+def card_to_code(card: Card) -> int:
+	return ((card.rank - 1) << 2) | SUIT_TO_INDEX[card.suit]
+
+
+_CODE_TO_CARD: tuple[Card, ...] = tuple(
+	Card(rank=(code >> 2) + 1, suit=INDEX_TO_SUIT[code & 0b11]) for code in range(CARD_CODE_COUNT)
+)
+
+
+def code_to_card(code: int) -> Card:
+	if code < 0 or code >= CARD_CODE_COUNT:
+		raise ValueError(f"Invalid packed card code: {code}")
+	return _CODE_TO_CARD[code]
+
+
+def card_code_rank(code: int) -> int:
+	if code < 0 or code >= CARD_CODE_COUNT:
+		raise ValueError(f"Invalid packed card code: {code}")
+	return (code >> 2) + 1
+
+
+def card_code_suit_index(code: int) -> int:
+	if code < 0 or code >= CARD_CODE_COUNT:
+		raise ValueError(f"Invalid packed card code: {code}")
+	return code & 0b11
+
+
+def card_code_is_red(code: int) -> bool:
+	# Suit indices follow CDHS, so D=1 and H=2 are red.
+	suit_index = card_code_suit_index(code)
+	return suit_index in (1, 2)
