@@ -6,8 +6,15 @@ from time import perf_counter
 import tracemalloc
 from typing import Iterator
 
-from ..core.rules import can_move_to_foundation, can_stack_on_cascade, is_descending_alternating, max_movable_cards
-from ..core.state import GameState, Move
+from ..core.card import EMPTY_CARD_CODE, card_code_suit_index
+from ..core.packed_state import PackedState
+from ..core.rules import (
+	can_move_to_foundation_code,
+	can_stack_on_cascade_code,
+	is_descending_alternating_codes,
+	max_movable_cards,
+)
+from ..core.state import Move
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,12 +33,12 @@ class SolveResult:
 
 class BaseSolver(ABC):
 	@abstractmethod
-	def solve(self, initial_state: GameState) -> SolveResult:
+	def solve(self, initial_state: PackedState) -> SolveResult:
 		"""
             
 		"""
 
-	def timed_solve(self, initial_state: GameState) -> SolveResult:
+	def timed_solve(self, initial_state: PackedState) -> SolveResult:
 		tracemalloc.start()
 		started = perf_counter()
 		result = self.solve(initial_state)
@@ -46,16 +53,16 @@ class BaseSolver(ABC):
 			expanded_nodes=result.expanded_nodes,
 		)
 
-	def is_goal(self, state: GameState) -> bool:
+	def is_goal(self, state: PackedState) -> bool:
 		return state.is_victory
 
-	def transition(self, state: GameState, move: Move) -> GameState:
+	def transition(self, state: PackedState, move: Move) -> PackedState:
 		return state.apply_move(move)
 
-	def legal_moves(self, state: GameState) -> tuple[Move, ...]:
+	def legal_moves(self, state: PackedState) -> tuple[Move, ...]:
 		return tuple(self.iter_legal_moves(state))
 
-	def iter_legal_moves(self, state: GameState) -> Iterator[Move]:
+	def iter_legal_moves(self, state: PackedState) -> Iterator[Move]:
 		# Prefer foundation moves first to reduce branching in common strategies.
 		yield from self._cascade_to_foundation_moves(state)
 		yield from self._freecell_to_foundation_moves(state)
@@ -63,12 +70,13 @@ class BaseSolver(ABC):
 		yield from self._cascade_to_cascade_moves(state)
 		yield from self._cascade_to_freecell_moves(state)
 
-	def _cascade_to_foundation_moves(self, state: GameState) -> Iterator[Move]:
-		for source_index, cascade in enumerate(state.cascades):
-			if not cascade:
+	def _cascade_to_foundation_moves(self, state: PackedState) -> Iterator[Move]:
+		for source_index in range(state.cascade_count):
+			top_code = state.cascade_top(source_index)
+			if top_code is None:
 				continue
-			top = cascade[-1]
-			if can_move_to_foundation(top, state.foundation_rank(top.suit)):
+			suit_index = card_code_suit_index(top_code)
+			if can_move_to_foundation_code(top_code, state.foundation_rank(suit_index)):
 				yield Move(
 					source="cascade",
 					source_index=source_index,
@@ -76,11 +84,13 @@ class BaseSolver(ABC):
 					destination_index=0,
 				)
 
-	def _freecell_to_foundation_moves(self, state: GameState) -> Iterator[Move]:
-		for source_index, card in enumerate(state.freecells):
-			if card is None:
+	def _freecell_to_foundation_moves(self, state: PackedState) -> Iterator[Move]:
+		for source_index in range(state.freecell_slot_count):
+			card_code = state.freecell(source_index)
+			if card_code == EMPTY_CARD_CODE:
 				continue
-			if can_move_to_foundation(card, state.foundation_rank(card.suit)):
+			suit_index = card_code_suit_index(card_code)
+			if can_move_to_foundation_code(card_code, state.foundation_rank(suit_index)):
 				yield Move(
 					source="freecell",
 					source_index=source_index,
@@ -88,13 +98,13 @@ class BaseSolver(ABC):
 					destination_index=0,
 				)
 
-	def _cascade_to_freecell_moves(self, state: GameState) -> Iterator[Move]:
-		empty_targets = [idx for idx, card in enumerate(state.freecells) if card is None]
+	def _cascade_to_freecell_moves(self, state: PackedState) -> Iterator[Move]:
+		empty_targets = [idx for idx in range(state.freecell_slot_count) if state.freecell(idx) == EMPTY_CARD_CODE]
 		if not empty_targets:
 			return
 		first_empty = empty_targets[0]
-		for source_index, cascade in enumerate(state.cascades):
-			if cascade:
+		for source_index in range(state.cascade_count):
+			if state.cascade_length(source_index) > 0:
 				yield Move(
 					source="cascade",
 					source_index=source_index,
@@ -102,13 +112,14 @@ class BaseSolver(ABC):
 					destination_index=first_empty,
 				)
 
-	def _freecell_to_cascade_moves(self, state: GameState) -> Iterator[Move]:
-		for source_index, card in enumerate(state.freecells):
-			if card is None:
+	def _freecell_to_cascade_moves(self, state: PackedState) -> Iterator[Move]:
+		for source_index in range(state.freecell_slot_count):
+			card_code = state.freecell(source_index)
+			if card_code == EMPTY_CARD_CODE:
 				continue
-			for destination_index, destination in enumerate(state.cascades):
-				dest_top = destination[-1] if destination else None
-				if can_stack_on_cascade(card, dest_top):
+			for destination_index in range(state.cascade_count):
+				destination_top_code = state.cascade_top(destination_index)
+				if can_stack_on_cascade_code(card_code, destination_top_code):
 					yield Move(
 						source="freecell",
 						source_index=source_index,
@@ -116,28 +127,30 @@ class BaseSolver(ABC):
 						destination_index=destination_index,
 					)
 
-	def _cascade_to_cascade_moves(self, state: GameState) -> Iterator[Move]:
-		for source_index, source in enumerate(state.cascades):
-			if not source:
+	def _cascade_to_cascade_moves(self, state: PackedState) -> Iterator[Move]:
+		for source_index in range(state.cascade_count):
+			source_len = state.cascade_length(source_index)
+			if source_len == 0:
 				continue
-			for destination_index, destination in enumerate(state.cascades):
+			for destination_index in range(state.cascade_count):
 				if source_index == destination_index:
 					continue
 
-				destination_is_empty = len(destination) == 0
-				auxiliary_empty_cascades = state.empty_cascade_count() - (1 if destination_is_empty else 0)
+				destination_len = state.cascade_length(destination_index)
+				destination_is_empty = destination_len == 0
+				auxiliary_empty_cascades = state.cascade_count_empty() - (1 if destination_is_empty else 0)
 				max_count = min(
-					len(source),
-					max_movable_cards(state.empty_freecell_count(), auxiliary_empty_cascades),
+					source_len,
+					max_movable_cards(state.freecell_count_empty(), auxiliary_empty_cascades),
 				)
 
 				for count in range(1, max_count + 1):
-					moving_stack = source[-count:]
-					if not is_descending_alternating(moving_stack):
+					moving_stack = state.cascade_tail_codes(source_index, count)
+					if not is_descending_alternating_codes(moving_stack):
 						continue
 
-					destination_top = destination[-1] if destination else None
-					if can_stack_on_cascade(moving_stack[0], destination_top):
+					destination_top = state.cascade_top(destination_index)
+					if can_stack_on_cascade_code(moving_stack[0], destination_top):
 						yield Move(
 							source="cascade",
 							source_index=source_index,
