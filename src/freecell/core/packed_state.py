@@ -35,11 +35,6 @@ _FOUNDATION_COMPLETE_MASK = sum(
     for i in range(_FOUNDATION_COUNT)
 )
 
-
-def _slot_mask(bit_width: int, index: int) -> int:
-    return ((1 << bit_width) - 1) << (index * bit_width)
-
-
 @dataclass(frozen=True, slots=True)
 class PackedState:
     """
