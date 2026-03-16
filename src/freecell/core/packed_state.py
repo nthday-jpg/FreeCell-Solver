@@ -6,15 +6,16 @@ from typing import TYPE_CHECKING
 from .card import (
     Card,
     EMPTY_CARD_CODE,
-    card_code_suit_index,
     card_to_code,
     code_to_card,
 )
-from .rules import (
-    can_move_to_foundation_code,
-    can_stack_on_cascade_code,
-    is_descending_alternating_codes,
-    max_movable_cards,
+from .move_engine import (
+    apply_packed_move,
+    move_packed_cascade_to_cascade,
+    move_packed_cascade_to_foundation,
+    move_packed_cascade_to_freecell,
+    move_packed_freecell_to_cascade,
+    move_packed_freecell_to_foundation,
 )
 
 if TYPE_CHECKING:
@@ -182,201 +183,19 @@ class PackedState:
         return sum(1 for index in range(_CASCADE_COUNT) if self.cascade_length(index) == 0)
 
     def move_cascade_to_freecell(self, cascade_index: int, freecell_index: int) -> "PackedState":
-        source_len = self.cascade_length(cascade_index)
-        if source_len == 0:
-            raise ValueError("Source cascade is empty")
-        if self.freecell(freecell_index) != EMPTY_CARD_CODE:
-            raise ValueError("Destination freecell is occupied")
-
-        source_word = self.cascade_words[cascade_index]
-        top_shift = (source_len - 1) * _CARD_BITS
-        moving = (source_word >> top_shift) & _CARD_MASK
-
-        source_new_len = source_len - 1
-        source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
-        source_new_word = source_word & source_keep_mask
-
-        new_words = list(self.cascade_words)
-        new_words[cascade_index] = source_new_word
-
-        new_lengths = (
-            self.cascade_lengths
-            & ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
-            | (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
-        )
-
-        new_freecells = (
-            self.freecells
-            & ~_slot_mask(_CARD_BITS, freecell_index)
-            | (moving << (freecell_index * _CARD_BITS))
-        )
-
-        return PackedState(
-            cascade_words=tuple(new_words),
-            cascade_lengths=new_lengths,
-            freecells=new_freecells,
-            foundations=self.foundations,
-        )
+        return move_packed_cascade_to_freecell(self, cascade_index, freecell_index)
 
     def move_freecell_to_cascade(self, freecell_index: int, cascade_index: int) -> "PackedState":
-        moving = self.freecell(freecell_index)
-        if moving == EMPTY_CARD_CODE:
-            raise ValueError("Source freecell is empty")
-
-        dest_len = self.cascade_length(cascade_index)
-        destination_top = self.cascade_top(cascade_index)
-        if not can_stack_on_cascade_code(moving, destination_top):
-            raise ValueError("Illegal placement on cascade")
-
-        dest_new_len = dest_len + 1
-        dest_new_word = self.cascade_words[cascade_index] | (moving << (dest_len * _CARD_BITS))
-
-        new_words = list(self.cascade_words)
-        new_words[cascade_index] = dest_new_word
-
-        new_lengths = (
-            self.cascade_lengths
-            & ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
-            | (dest_new_len << (cascade_index * _CASCADE_LEN_BITS))
-        )
-
-        new_freecells = self.freecells & ~_slot_mask(_CARD_BITS, freecell_index)
-        new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
-
-        return PackedState(
-            cascade_words=tuple(new_words),
-            cascade_lengths=new_lengths,
-            freecells=new_freecells,
-            foundations=self.foundations,
-        )
+        return move_packed_freecell_to_cascade(self, freecell_index, cascade_index)
 
     def move_cascade_to_foundation(self, cascade_index: int) -> "PackedState":
-        source_len = self.cascade_length(cascade_index)
-        if source_len == 0:
-            raise ValueError("Source cascade is empty")
-
-        source_word = self.cascade_words[cascade_index]
-        top_shift = (source_len - 1) * _CARD_BITS
-        moving = (source_word >> top_shift) & _CARD_MASK
-        suit_index = card_code_suit_index(moving)
-        current_rank = self.foundation_rank(suit_index)
-        if not can_move_to_foundation_code(moving, current_rank):
-            raise ValueError("Card cannot be moved to foundation")
-
-        source_new_len = source_len - 1
-        source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
-        source_new_word = source_word & source_keep_mask
-
-        new_words = list(self.cascade_words)
-        new_words[cascade_index] = source_new_word
-
-        new_lengths = (
-            self.cascade_lengths
-            & ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
-            | (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
-        )
-
-        new_foundations = self.foundations & ~_slot_mask(_FOUNDATION_BITS, suit_index)
-        new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
-
-        return PackedState(
-            cascade_words=tuple(new_words),
-            cascade_lengths=new_lengths,
-            freecells=self.freecells,
-            foundations=new_foundations,
-        )
+        return move_packed_cascade_to_foundation(self, cascade_index)
 
     def move_freecell_to_foundation(self, freecell_index: int) -> "PackedState":
-        moving = self.freecell(freecell_index)
-        if moving == EMPTY_CARD_CODE:
-            raise ValueError("Source freecell is empty")
-
-        suit_index = card_code_suit_index(moving)
-        current_rank = self.foundation_rank(suit_index)
-        if not can_move_to_foundation_code(moving, current_rank):
-            raise ValueError("Card cannot be moved to foundation")
-
-        new_freecells = self.freecells & ~_slot_mask(_CARD_BITS, freecell_index)
-        new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
-
-        new_foundations = self.foundations & ~_slot_mask(_FOUNDATION_BITS, suit_index)
-        new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
-
-        return PackedState(
-            cascade_words=self.cascade_words,
-            cascade_lengths=self.cascade_lengths,
-            freecells=new_freecells,
-            foundations=new_foundations,
-        )
+        return move_packed_freecell_to_foundation(self, freecell_index)
 
     def move_cascade_to_cascade(self, source_index: int, destination_index: int, count: int = 1) -> "PackedState":
-        if count <= 0:
-            raise ValueError("count must be positive")
-        if source_index == destination_index:
-            raise ValueError("Source and destination cascades must differ")
-
-        source_len = self.cascade_length(source_index)
-        destination_len = self.cascade_length(destination_index)
-        if source_len < count:
-            raise ValueError("Source cascade does not contain enough cards")
-
-        source_word = self.cascade_words[source_index]
-        moving_shift = (source_len - count) * _CARD_BITS
-        moving_mask = (1 << (count * _CARD_BITS)) - 1
-        moving_bits = (source_word >> moving_shift) & moving_mask
-        moving_stack = tuple((moving_bits >> (i * _CARD_BITS)) & _CARD_MASK for i in range(count))
-        if not is_descending_alternating_codes(moving_stack):
-            raise ValueError("Moving stack is not in descending alternating order")
-
-        destination_is_empty = destination_len == 0
-        auxiliary_empty_cascades = self.cascade_count_empty() - (1 if destination_is_empty else 0)
-        allowed = max_movable_cards(self.freecell_count_empty(), auxiliary_empty_cascades)
-        if count > allowed:
-            raise ValueError(f"Cannot move {count} cards with current free space (max {allowed})")
-
-        destination_top = self.cascade_top(destination_index)
-        if not can_stack_on_cascade_code(moving_stack[0], destination_top):
-            raise ValueError("Illegal placement on destination cascade")
-
-        source_new_len = source_len - count
-        source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
-        source_new_word = source_word & source_keep_mask
-        destination_new_word = self.cascade_words[destination_index] | (moving_bits << (destination_len * _CARD_BITS))
-
-        new_words = list(self.cascade_words)
-        new_words[source_index] = source_new_word
-        new_words[destination_index] = destination_new_word
-
-        new_lengths = self.cascade_lengths
-        new_lengths = new_lengths & ~_slot_mask(_CASCADE_LEN_BITS, source_index)
-        new_lengths |= source_new_len << (source_index * _CASCADE_LEN_BITS)
-        new_lengths = new_lengths & ~_slot_mask(_CASCADE_LEN_BITS, destination_index)
-        new_lengths |= (destination_len + count) << (destination_index * _CASCADE_LEN_BITS)
-
-        return PackedState(
-            cascade_words=tuple(new_words),
-            cascade_lengths=new_lengths,
-            freecells=self.freecells,
-            foundations=self.foundations,
-        )
+        return move_packed_cascade_to_cascade(self, source_index, destination_index, count=count)
 
     def apply_move(self, move: "Move") -> "PackedState":
-        if move.source == "cascade" and move.destination == "cascade":
-            return self.move_cascade_to_cascade(move.source_index, move.destination_index, count=move.count)
-        if move.source == "cascade" and move.destination == "freecell":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to freecell")
-            return self.move_cascade_to_freecell(move.source_index, move.destination_index)
-        if move.source == "freecell" and move.destination == "cascade":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved from freecell")
-            return self.move_freecell_to_cascade(move.source_index, move.destination_index)
-        if move.source == "cascade" and move.destination == "foundation":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to foundation")
-            return self.move_cascade_to_foundation(move.source_index)
-        if move.source == "freecell" and move.destination == "foundation":
-            if move.count != 1:
-                raise ValueError("Only one card can be moved to foundation")
-            return self.move_freecell_to_foundation(move.source_index)
-        raise ValueError(f"Unsupported move: {move}")
+        return apply_packed_move(self, move)
