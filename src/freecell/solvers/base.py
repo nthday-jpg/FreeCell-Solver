@@ -67,9 +67,6 @@ class BaseSolver(ABC):
 	def transition(self, state: PackedState, move: Move) -> PackedState:
 		return state.apply_move(move)
 
-	def legal_moves(self, state: PackedState) -> tuple[Move, ...]:
-		return tuple(self.iter_legal_moves(state))
-
 	def iter_legal_moves(self, state: PackedState) -> Iterator[Move]:
 		# Prefer foundation moves first to reduce branching in common strategies.
 		yield from self._cascade_to_foundation_moves(state)
