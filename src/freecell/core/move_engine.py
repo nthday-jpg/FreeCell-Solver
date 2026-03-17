@@ -23,6 +23,10 @@ _FOUNDATION_BITS = 4
 def _slot_mask(bit_width: int, index: int) -> int:
 	return ((1 << bit_width) - 1) << (index * bit_width)
 
+_SLOT_MASKS_CASCADE_LEN = tuple(_slot_mask(_CASCADE_LEN_BITS, i) for i in range(8))
+_SLOT_MASKS_CARD = tuple(_slot_mask(_CARD_BITS, i) for i in range(8))
+_SLOT_MASKS_FOUNDATION = tuple(_slot_mask(_FOUNDATION_BITS, i) for i in range(4))
+
 
 def _new_state(state: "PackedState", *, cascade_words: tuple[int, ...], cascade_lengths: int, freecells: int, foundations: int) -> "PackedState":
 	return state.__class__(
@@ -53,13 +57,13 @@ def move_packed_cascade_to_freecell(state: "PackedState", cascade_index: int, fr
 
 	new_lengths = (
 		state.cascade_lengths
-		& ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
+		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
 		| (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
 	)
 
 	new_freecells = (
 		state.freecells
-		& ~_slot_mask(_CARD_BITS, freecell_index)
+		& ~_SLOT_MASKS_CARD[freecell_index]
 		| (moving << (freecell_index * _CARD_BITS))
 	)
 
@@ -90,11 +94,11 @@ def move_packed_freecell_to_cascade(state: "PackedState", freecell_index: int, c
 
 	new_lengths = (
 		state.cascade_lengths
-		& ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
+		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
 		| (dest_new_len << (cascade_index * _CASCADE_LEN_BITS))
 	)
 
-	new_freecells = state.freecells & ~_slot_mask(_CARD_BITS, freecell_index)
+	new_freecells = state.freecells & ~_SLOT_MASKS_CARD[freecell_index]
 	new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
 
 	return _new_state(
@@ -128,11 +132,11 @@ def move_packed_cascade_to_foundation(state: "PackedState", cascade_index: int) 
 
 	new_lengths = (
 		state.cascade_lengths
-		& ~_slot_mask(_CASCADE_LEN_BITS, cascade_index)
+		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
 		| (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
 	)
 
-	new_foundations = state.foundations & ~_slot_mask(_FOUNDATION_BITS, suit_index)
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
 	new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
 
 	return _new_state(
@@ -154,10 +158,10 @@ def move_packed_freecell_to_foundation(state: "PackedState", freecell_index: int
 	if not can_move_to_foundation_code(moving, current_rank):
 		raise ValueError("Card cannot be moved to foundation")
 
-	new_freecells = state.freecells & ~_slot_mask(_CARD_BITS, freecell_index)
+	new_freecells = state.freecells & ~_SLOT_MASKS_CARD[freecell_index]
 	new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
 
-	new_foundations = state.foundations & ~_slot_mask(_FOUNDATION_BITS, suit_index)
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
 	new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
 
 	return _new_state(
@@ -208,9 +212,9 @@ def move_packed_cascade_to_cascade(state: "PackedState", source_index: int, dest
 	new_words[destination_index] = destination_new_word
 
 	new_lengths = state.cascade_lengths
-	new_lengths = new_lengths & ~_slot_mask(_CASCADE_LEN_BITS, source_index)
+	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[source_index]
 	new_lengths |= source_new_len << (source_index * _CASCADE_LEN_BITS)
-	new_lengths = new_lengths & ~_slot_mask(_CASCADE_LEN_BITS, destination_index)
+	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[destination_index]
 	new_lengths |= (destination_len + count) << (destination_index * _CASCADE_LEN_BITS)
 
 	return _new_state(
