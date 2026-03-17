@@ -55,6 +55,14 @@ class PackedState:
     freecells: int
     foundations: int
 
+    _hash_cache: int = field(default=0, init=False, repr=False, compare=False, hash=False)
+    
+    def __post_init__(self) -> None:
+        object.__setattr__(self, '_hash_cache', hash((self.cascade_words, self.cascade_lengths, self.freecells, self.foundations)))
+    
+    def __hash__(self) -> int:
+        return self._hash_cache
+
     @property
     def is_victory(self) -> bool:
         return self.foundations == _FOUNDATION_COMPLETE_MASK
