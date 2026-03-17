@@ -148,6 +148,12 @@ class PackedState:
         return (self.freecells >> (index * _CARD_BITS)) & _CARD_MASK
 
     def freecell_count_empty(self) -> int:
+        # count = 0
+        # for i in range(_FREECELL_COUNT):
+        #     if self.freecell(i) == EMPTY_CARD_CODE:
+        #         count+=1
+        # return count
+
         return sum(1 for index in range(_FREECELL_COUNT) if self.freecell(index) == EMPTY_CARD_CODE)
 
     def foundation_rank(self, suit_index: int) -> int:
@@ -177,6 +183,12 @@ class PackedState:
         return tuple((tail_bits >> (offset * _CARD_BITS)) & _CARD_MASK for offset in range(count))
 
     def cascade_count_empty(self) -> int:
+        # count = 0
+        # for i in range(_CASCADE_COUNT):
+        #     if ((self.cascade_lengths >> (i * _CASCADE_LEN_BITS)) & 0xF) == 0:
+        #         count += 1
+        # return count
+
         return sum(1 for index in range(_CASCADE_COUNT) if self.cascade_length(index) == 0)
 
     def move_cascade_to_freecell(self, cascade_index: int, freecell_index: int) -> "PackedState":
