@@ -37,11 +37,17 @@ def _new_state(state: "PackedState", *, cascade_words: tuple[int, ...], cascade_
 	)
 
 
-def move_packed_cascade_to_freecell(state: "PackedState", cascade_index: int, freecell_index: int) -> "PackedState":
+def move_packed_cascade_to_freecell(
+	state: "PackedState",
+	cascade_index: int,
+	freecell_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
 	source_len = state.cascade_length(cascade_index)
-	if source_len == 0:
+	if validate and source_len == 0:
 		raise ValueError("Source cascade is empty")
-	if state.freecell(freecell_index) != EMPTY_CARD_CODE:
+	if validate and state.freecell(freecell_index) != EMPTY_CARD_CODE:
 		raise ValueError("Destination freecell is occupied")
 
 	source_word = state.cascade_words[cascade_index]
@@ -76,14 +82,20 @@ def move_packed_cascade_to_freecell(state: "PackedState", cascade_index: int, fr
 	)
 
 
-def move_packed_freecell_to_cascade(state: "PackedState", freecell_index: int, cascade_index: int) -> "PackedState":
+def move_packed_freecell_to_cascade(
+	state: "PackedState",
+	freecell_index: int,
+	cascade_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
 	moving = state.freecell(freecell_index)
-	if moving == EMPTY_CARD_CODE:
+	if validate and moving == EMPTY_CARD_CODE:
 		raise ValueError("Source freecell is empty")
 
 	dest_len = state.cascade_length(cascade_index)
 	destination_top = state.cascade_top(cascade_index)
-	if not can_stack_on_cascade_code(moving, destination_top):
+	if validate and not can_stack_on_cascade_code(moving, destination_top):
 		raise ValueError("Illegal placement on cascade")
 
 	dest_new_len = dest_len + 1
@@ -110,9 +122,14 @@ def move_packed_freecell_to_cascade(state: "PackedState", freecell_index: int, c
 	)
 
 
-def move_packed_cascade_to_foundation(state: "PackedState", cascade_index: int) -> "PackedState":
+def move_packed_cascade_to_foundation(
+	state: "PackedState",
+	cascade_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
 	source_len = state.cascade_length(cascade_index)
-	if source_len == 0:
+	if validate and source_len == 0:
 		raise ValueError("Source cascade is empty")
 
 	source_word = state.cascade_words[cascade_index]
@@ -120,7 +137,7 @@ def move_packed_cascade_to_foundation(state: "PackedState", cascade_index: int) 
 	moving = (source_word >> top_shift) & _CARD_MASK
 	suit_index = card_code_suit_index(moving)
 	current_rank = state.foundation_rank(suit_index)
-	if not can_move_to_foundation_code(moving, current_rank):
+	if validate and not can_move_to_foundation_code(moving, current_rank):
 		raise ValueError("Card cannot be moved to foundation")
 
 	source_new_len = source_len - 1
@@ -148,14 +165,19 @@ def move_packed_cascade_to_foundation(state: "PackedState", cascade_index: int) 
 	)
 
 
-def move_packed_freecell_to_foundation(state: "PackedState", freecell_index: int) -> "PackedState":
+def move_packed_freecell_to_foundation(
+	state: "PackedState",
+	freecell_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
 	moving = state.freecell(freecell_index)
-	if moving == EMPTY_CARD_CODE:
+	if validate and moving == EMPTY_CARD_CODE:
 		raise ValueError("Source freecell is empty")
 
 	suit_index = card_code_suit_index(moving)
 	current_rank = state.foundation_rank(suit_index)
-	if not can_move_to_foundation_code(moving, current_rank):
+	if validate and not can_move_to_foundation_code(moving, current_rank):
 		raise ValueError("Card cannot be moved to foundation")
 
 	new_freecells = state.freecells & ~_SLOT_MASKS_CARD[freecell_index]
@@ -173,7 +195,15 @@ def move_packed_freecell_to_foundation(state: "PackedState", freecell_index: int
 	)
 
 
-def move_packed_cascade_to_cascade(state: "PackedState", source_index: int, destination_index: int, count: int = 1) -> "PackedState":
+def move_packed_cascade_to_cascade(
+		state: "PackedState", 
+		source_index: int, 
+		destination_index: int, 
+		count: int = 1,
+		*,
+		validate: bool = True
+	) -> "PackedState":
+
 	if count <= 0:
 		raise ValueError("count must be positive")
 	if source_index == destination_index:
@@ -188,19 +218,21 @@ def move_packed_cascade_to_cascade(state: "PackedState", source_index: int, dest
 	moving_shift = (source_len - count) * _CARD_BITS
 	moving_mask = (1 << (count * _CARD_BITS)) - 1
 	moving_bits = (source_word >> moving_shift) & moving_mask
-	moving_stack = tuple((moving_bits >> (i * _CARD_BITS)) & _CARD_MASK for i in range(count))
-	if not is_descending_alternating_codes(moving_stack):
-		raise ValueError("Moving stack is not in descending alternating order")
 
-	destination_is_empty = destination_len == 0
-	auxiliary_empty_cascades = state.cascade_count_empty() - (1 if destination_is_empty else 0)
-	allowed = max_movable_cards(state.freecell_count_empty(), auxiliary_empty_cascades)
-	if count > allowed:
-		raise ValueError(f"Cannot move {count} cards with current free space (max {allowed})")
+	if validate:
+		moving_stack = tuple((moving_bits >> (i * _CARD_BITS)) & _CARD_MASK for i in range(count))
+		if not is_descending_alternating_codes(moving_stack):
+			raise ValueError("Moving stack is not in descending alternating order")
 
-	destination_top = state.cascade_top(destination_index)
-	if not can_stack_on_cascade_code(moving_stack[0], destination_top):
-		raise ValueError("Illegal placement on destination cascade")
+		destination_is_empty = destination_len == 0
+		auxiliary_empty_cascades = state.cascade_count_empty() - (1 if destination_is_empty else 0)
+		allowed = max_movable_cards(state.freecell_count_empty(), auxiliary_empty_cascades)
+		if count > allowed:
+			raise ValueError(f"Cannot move {count} cards with current free space (max {allowed})")
+
+		destination_top = state.cascade_top(destination_index)
+		if not can_stack_on_cascade_code(moving_stack[0], destination_top):
+			raise ValueError("Illegal placement on destination cascade")
 
 	source_new_len = source_len - count
 	source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
@@ -226,23 +258,47 @@ def move_packed_cascade_to_cascade(state: "PackedState", source_index: int, dest
 	)
 
 
-def apply_packed_move(state: "PackedState", move: "Move") -> "PackedState":
+def apply_packed_move(state: "PackedState", move: "Move", *, validate: bool = True) -> "PackedState":
 	if move.source == "cascade" and move.destination == "cascade":
-		return move_packed_cascade_to_cascade(state, move.source_index, move.destination_index, count=move.count)
+		return move_packed_cascade_to_cascade(
+			state,
+			move.source_index,
+			move.destination_index,
+			count=move.count,
+			validate=validate,
+		)
 	if move.source == "cascade" and move.destination == "freecell":
-		if move.count != 1:
+		if validate and move.count != 1:
 			raise ValueError("Only one card can be moved to freecell")
-		return move_packed_cascade_to_freecell(state, move.source_index, move.destination_index)
+		return move_packed_cascade_to_freecell(
+			state,
+			move.source_index,
+			move.destination_index,
+			validate=validate,
+		)
 	if move.source == "freecell" and move.destination == "cascade":
-		if move.count != 1:
+		if validate and move.count != 1:
 			raise ValueError("Only one card can be moved from freecell")
-		return move_packed_freecell_to_cascade(state, move.source_index, move.destination_index)
+		return move_packed_freecell_to_cascade(
+			state,
+			move.source_index,
+			move.destination_index,
+			validate=validate,
+		)
 	if move.source == "cascade" and move.destination == "foundation":
-		if move.count != 1:
+		if validate and move.count != 1:
 			raise ValueError("Only one card can be moved to foundation")
-		return move_packed_cascade_to_foundation(state, move.source_index)
+		return move_packed_cascade_to_foundation(
+			state,
+			move.source_index,
+			validate=validate,
+		)
 	if move.source == "freecell" and move.destination == "foundation":
-		if move.count != 1:
+		if validate and move.count != 1:
 			raise ValueError("Only one card can be moved to foundation")
-		return move_packed_freecell_to_foundation(state, move.source_index)
+		return move_packed_freecell_to_foundation(
+			state,
+			move.source_index,
+			validate=validate,
+		)
 	raise ValueError(f"Unsupported move: {move}")

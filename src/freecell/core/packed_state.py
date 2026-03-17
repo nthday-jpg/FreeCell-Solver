@@ -214,5 +214,5 @@ class PackedState:
     def move_cascade_to_cascade(self, source_index: int, destination_index: int, count: int = 1) -> "PackedState":
         return move_packed_cascade_to_cascade(self, source_index, destination_index, count=count)
 
-    def apply_move(self, move: "Move") -> "PackedState":
-        return apply_packed_move(self, move)
+    def apply_move(self, move: "Move", *, validate: bool = True) -> "PackedState":
+        return apply_packed_move(self, move, validate=validate)

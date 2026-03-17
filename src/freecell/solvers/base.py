@@ -67,8 +67,8 @@ class BaseSolver(ABC):
 	def is_goal(self, state: PackedState) -> bool:
 		return state.is_victory
 
-	def transition(self, state: PackedState, move: Move) -> PackedState:
-		return state.apply_move(move)
+	def transition(self, state: PackedState, move: Move, *, validate: bool = True) -> PackedState:
+		return state.apply_move(move, validate=validate)
 
 	def iter_legal_moves(self, state: PackedState) -> Iterator[Move]:
 		cascade_count = state.cascade_count
