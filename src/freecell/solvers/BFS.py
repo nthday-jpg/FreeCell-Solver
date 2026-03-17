@@ -2,7 +2,8 @@ from collections import deque
 from time import perf_counter
 
 
-from .base import BaseSolver, SolveResult
+from .base import BaseSolver, SolveResult, RawMove
+from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from ..core import PackedState, Move
 
 
@@ -21,7 +22,7 @@ class BFSSolver(BaseSolver):
         queue: deque[PackedState] = deque((initial_state,))
         visited: set[PackedState] = {initial_state}
         parents: dict[PackedState, PackedState | None] = {initial_state: None}
-        parent_moves: dict[PackedState, Move] = {}
+        parent_moves: dict[PackedState, RawMove] = {}
 
         expanded_nodes = 0
 
@@ -31,7 +32,7 @@ class BFSSolver(BaseSolver):
             expanded_nodes += 1
             
             for move in self.iter_legal_moves(state):
-                next_state = self.transition(state, move)
+                next_state = self.transition(state, move, validate=False)
                 if next_state in visited:
                     continue
 
@@ -60,7 +61,7 @@ class BFSSolver(BaseSolver):
     def _reconstruct_moves(
         goal_state: PackedState,
         parents: dict[PackedState, PackedState | None],
-        parent_moves: dict[PackedState, Move],
+        parent_moves: dict[PackedState, RawMove],
     ) -> tuple[Move, ...]:
         moves_reversed: list[Move] = []
         current = goal_state
@@ -69,7 +70,18 @@ class BFSSolver(BaseSolver):
             move = parent_moves.get(current)
             if move is None:
                 break
-            moves_reversed.append(move)
+            source, source_index, destination, destination_index, count = move
+            source_name = "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
+            destination_name = "cascade" if destination == CASCADE else "freecell" if destination == FREECELL else "foundation"
+            moves_reversed.append(
+                Move(
+                    source=source_name,
+                    source_index=source_index,
+                    destination=destination_name,
+                    destination_index=destination_index,
+                    count=count,
+                )
+            )
             parent = parents[current]
             if parent is None:
                 break

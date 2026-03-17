@@ -7,6 +7,7 @@ import tracemalloc
 from typing import Iterator
 
 from ..core.card import EMPTY_CARD_CODE, card_code_suit_index
+from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from ..core.packed_state import PackedState
 from ..core.rules import (
 	can_move_to_foundation_code,
@@ -15,6 +16,8 @@ from ..core.rules import (
 	max_movable_cards,
 )
 from ..core.state import Move
+
+RawMove = tuple[int, int, int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,10 +67,10 @@ class BaseSolver(ABC):
 	def is_goal(self, state: PackedState) -> bool:
 		return state.is_victory
 
-	def transition(self, state: PackedState, move: Move, *, validate: bool = True) -> PackedState:
-		return state.apply_move(move, validate=validate)
+	def transition(self, state: PackedState, move: RawMove, *, validate: bool = True) -> PackedState:
+		return state.apply_raw_move(move, validate=validate)
 
-	def iter_legal_moves(self, state: PackedState) -> Iterator[Move]:
+	def iter_legal_moves(self, state: PackedState) -> Iterator[RawMove]:
 		# Prefer foundation moves first to reduce branching in common strategies.
 		yield from self._cascade_to_foundation_moves(state)
 		yield from self._freecell_to_foundation_moves(state)
@@ -75,49 +78,34 @@ class BaseSolver(ABC):
 		yield from self._cascade_to_cascade_moves(state)
 		yield from self._cascade_to_freecell_moves(state)
 
-	def _cascade_to_foundation_moves(self, state: PackedState) -> Iterator[Move]:
+	def _cascade_to_foundation_moves(self, state: PackedState) -> Iterator[RawMove]:
 		for source_index in range(state.cascade_count):
 			top_code = state.cascade_top(source_index)
 			if top_code is None:
 				continue
 			suit_index = card_code_suit_index(top_code)
 			if can_move_to_foundation_code(top_code, state.foundation_rank(suit_index)):
-				yield Move(
-					source="cascade",
-					source_index=source_index,
-					destination="foundation",
-					destination_index=0,
-				)
+				yield (CASCADE, source_index, FOUNDATION, 0, 1)
 
-	def _freecell_to_foundation_moves(self, state: PackedState) -> Iterator[Move]:
+	def _freecell_to_foundation_moves(self, state: PackedState) -> Iterator[RawMove]:
 		for source_index in range(state.freecell_slot_count):
 			card_code = state.freecell(source_index)
 			if card_code == EMPTY_CARD_CODE:
 				continue
 			suit_index = card_code_suit_index(card_code)
 			if can_move_to_foundation_code(card_code, state.foundation_rank(suit_index)):
-				yield Move(
-					source="freecell",
-					source_index=source_index,
-					destination="foundation",
-					destination_index=0,
-				)
+				yield (FREECELL, source_index, FOUNDATION, 0, 1)
 
-	def _cascade_to_freecell_moves(self, state: PackedState) -> Iterator[Move]:
+	def _cascade_to_freecell_moves(self, state: PackedState) -> Iterator[RawMove]:
 		empty_targets = [idx for idx in range(state.freecell_slot_count) if state.freecell(idx) == EMPTY_CARD_CODE]
 		if not empty_targets:
 			return
 		first_empty = empty_targets[0]
 		for source_index in range(state.cascade_count):
 			if state.cascade_length(source_index) > 0:
-				yield Move(
-					source="cascade",
-					source_index=source_index,
-					destination="freecell",
-					destination_index=first_empty,
-				)
+				yield (CASCADE, source_index, FREECELL, first_empty, 1)
 
-	def _freecell_to_cascade_moves(self, state: PackedState) -> Iterator[Move]:
+	def _freecell_to_cascade_moves(self, state: PackedState) -> Iterator[RawMove]:
 		for source_index in range(state.freecell_slot_count):
 			card_code = state.freecell(source_index)
 			if card_code == EMPTY_CARD_CODE:
@@ -125,14 +113,9 @@ class BaseSolver(ABC):
 			for destination_index in range(state.cascade_count):
 				destination_top_code = state.cascade_top(destination_index)
 				if can_stack_on_cascade_code(card_code, destination_top_code):
-					yield Move(
-						source="freecell",
-						source_index=source_index,
-						destination="cascade",
-						destination_index=destination_index,
-					)
+					yield (FREECELL, source_index, CASCADE, destination_index, 1)
 
-	def _cascade_to_cascade_moves(self, state: PackedState) -> Iterator[Move]:
+	def _cascade_to_cascade_moves(self, state: PackedState) -> Iterator[RawMove]:
 		empty_cascades_total = state.cascade_count_empty()
 		empty_freecells_total = state.freecell_count_empty()
 		cascade_lengths = [state.cascade_length(i) for i in range(state.cascade_count)]
@@ -159,13 +142,7 @@ class BaseSolver(ABC):
 					moving_code = moving_stack[0]
 
 					if can_stack_on_cascade_code(moving_code, destination_top_code):
-						yield Move(
-							source="cascade",
-							source_index=source_index,
-							destination="cascade",
-							destination_index=destination_index,
-							count=count,
-						)
+						yield (CASCADE, source_index, CASCADE, destination_index, count)
 
 	@staticmethod
 	def build_result(

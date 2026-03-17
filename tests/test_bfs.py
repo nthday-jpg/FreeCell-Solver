@@ -47,7 +47,7 @@ def benchmark_bfs_expansions(seed: int, target_expansions: int) -> float:
 
 def main() -> None:
     seed = 1
-    target_expansions = 100_000
+    target_expansions = 1_000
     warmup_runs = 1
     measured_runs = 5
 

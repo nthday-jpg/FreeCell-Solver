@@ -14,6 +14,12 @@ if TYPE_CHECKING:
 	from .packed_state import PackedState
 	from .state import Move
 
+CASCADE = 0
+FREECELL = 1
+FOUNDATION = 2
+
+RawMove = tuple[int, int, int, int, int]
+
 _CARD_BITS = 6
 _CARD_MASK = (1 << _CARD_BITS) - 1
 _CASCADE_LEN_BITS = 4
@@ -258,47 +264,68 @@ def move_packed_cascade_to_cascade(
 	)
 
 
-def apply_packed_move(state: "PackedState", move: "Move", *, validate: bool = True) -> "PackedState":
-	if move.source == "cascade" and move.destination == "cascade":
+def apply_packed_raw_move(state: "PackedState", move: "RawMove", *, validate: bool = True) -> "PackedState":
+	source, source_index, destination, destination_index, count = move
+
+	if source == CASCADE and destination == CASCADE:
 		return move_packed_cascade_to_cascade(
 			state,
-			move.source_index,
-			move.destination_index,
-			count=move.count,
+			source_index,
+			destination_index,
+			count=count,
 			validate=validate,
 		)
-	if move.source == "cascade" and move.destination == "freecell":
-		if validate and move.count != 1:
+	if source == CASCADE and destination == FREECELL:
+		if validate and count != 1:
 			raise ValueError("Only one card can be moved to freecell")
 		return move_packed_cascade_to_freecell(
 			state,
-			move.source_index,
-			move.destination_index,
+			source_index,
+			destination_index,
 			validate=validate,
 		)
-	if move.source == "freecell" and move.destination == "cascade":
-		if validate and move.count != 1:
+	if source == FREECELL and destination == CASCADE:
+		if validate and count != 1:
 			raise ValueError("Only one card can be moved from freecell")
 		return move_packed_freecell_to_cascade(
 			state,
-			move.source_index,
-			move.destination_index,
+			source_index,
+			destination_index,
 			validate=validate,
 		)
-	if move.source == "cascade" and move.destination == "foundation":
-		if validate and move.count != 1:
+	if source == CASCADE and destination == FOUNDATION:
+		if validate and count != 1:
 			raise ValueError("Only one card can be moved to foundation")
 		return move_packed_cascade_to_foundation(
 			state,
-			move.source_index,
+			source_index,
 			validate=validate,
 		)
-	if move.source == "freecell" and move.destination == "foundation":
-		if validate and move.count != 1:
+	if source == FREECELL and destination == FOUNDATION:
+		if validate and count != 1:
 			raise ValueError("Only one card can be moved to foundation")
 		return move_packed_freecell_to_foundation(
 			state,
-			move.source_index,
+			source_index,
 			validate=validate,
 		)
 	raise ValueError(f"Unsupported move: {move}")
+
+
+def apply_packed_move(state: "PackedState", move: "Move") -> "PackedState":
+	if move.source == "cascade":
+		source = CASCADE
+	elif move.source == "freecell":
+		source = FREECELL
+	else:
+		source = FOUNDATION
+
+	if move.destination == "cascade":
+		destination = CASCADE
+	elif move.destination == "freecell":
+		destination = FREECELL
+	else:
+		destination = FOUNDATION
+
+	raw_move: RawMove = (source, move.source_index, destination, move.destination_index, move.count)
+	return apply_packed_raw_move(state, raw_move)

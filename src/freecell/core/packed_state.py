@@ -11,6 +11,7 @@ from .card import (
 )
 from .move_engine import (
     apply_packed_move,
+    apply_packed_raw_move,
     move_packed_cascade_to_cascade,
     move_packed_cascade_to_foundation,
     move_packed_cascade_to_freecell,
@@ -21,6 +22,8 @@ from .move_engine import (
 if TYPE_CHECKING:
     from .state import GameState
     from .state import Move
+
+RawMove = tuple[int, int, int, int, int]
 
 _CARD_BITS = 6
 _CARD_MASK = (1 << _CARD_BITS) - 1
@@ -214,5 +217,8 @@ class PackedState:
     def move_cascade_to_cascade(self, source_index: int, destination_index: int, count: int = 1) -> "PackedState":
         return move_packed_cascade_to_cascade(self, source_index, destination_index, count=count)
 
-    def apply_move(self, move: "Move", *, validate: bool = True) -> "PackedState":
-        return apply_packed_move(self, move, validate=validate)
+    def apply_move(self, move: "Move") -> "PackedState":
+        return apply_packed_move(self, move)
+
+    def apply_raw_move(self, move: RawMove, *, validate: bool = True) -> "PackedState":
+        return apply_packed_raw_move(self, move, validate=validate)
