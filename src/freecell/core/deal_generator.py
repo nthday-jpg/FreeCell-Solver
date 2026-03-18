@@ -4,19 +4,21 @@ from random import Random
 from typing import Sequence
 
 from .card import Card, standard_deck
+from .constants import (
+	MS_RAND_MULTIPLIER,
+	MS_RAND_INCREMENT,
+	MS_RAND_MASK,
+)
 
 
-_MS_RAND_MULTIPLIER = 214013
-_MS_RAND_INCREMENT = 2531011
-_MS_RAND_MASK = 0x7FFFFFFF
 
 
 def _microsoft_rand_stream(seed: int) -> tuple[int, ...]:
 	"""Return 52 outputs from the Microsoft C runtime rand() sequence."""
-	state = seed & _MS_RAND_MASK
+	state = seed & MS_RAND_MASK
 	values: list[int] = []
 	for _ in range(52):
-		state = (_MS_RAND_MULTIPLIER * state + _MS_RAND_INCREMENT) & _MS_RAND_MASK
+		state = (MS_RAND_MULTIPLIER * state + MS_RAND_INCREMENT) & MS_RAND_MASK
 		values.append((state >> 16) & 0x7FFF)
 	return tuple(values)
 

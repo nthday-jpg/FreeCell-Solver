@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
+from .constants import CARD_CODE_COUNT
+
 SUITS: tuple[str, ...] = ("C", "D", "H", "S")
 SUIT_TO_INDEX: dict[str, int] = {suit: idx for idx, suit in enumerate(SUITS)}
 INDEX_TO_SUIT: tuple[str, ...] = SUITS
-CARD_CODE_COUNT = 52
-EMPTY_CARD_CODE = 63 # Represents an empty slot in freecells
 
 RANK_TO_NAME: dict[int, str] = {
 	1: "A",

@@ -1,7 +1,6 @@
 from .card import (
     CARD_CODE_COUNT,
     Card,
-    EMPTY_CARD_CODE,
     SUITS,
     card_code_is_red,
     card_code_rank,
@@ -27,7 +26,6 @@ __all__ = [
     "Card",
     "SUITS",
     "CARD_CODE_COUNT",
-    "EMPTY_CARD_CODE",
     "standard_deck",
     "shuffled_deck",
     "microsoft_shuffled_deck",

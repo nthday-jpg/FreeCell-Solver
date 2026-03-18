@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .card import EMPTY_CARD_CODE, card_code_suit_index
+from .card import card_code_suit_index
 from .rules import (
 	can_move_to_foundation_code,
 	can_stack_on_cascade_code,
@@ -10,28 +10,31 @@ from .rules import (
 	max_movable_cards,
 )
 
+from .constants import (
+	CARD_BITS,
+	CARD_MASK,
+	CASCADE_LEN_BITS,
+	FOUNDATION_BITS,
+	FREECELL,
+	FOUNDATION,
+	CASCADE,
+	EMPTY_CARD_CODE,
+	RawMove
+)
+
+
 if TYPE_CHECKING:
 	from .packed_state import PackedState
 	from .state import Move
 
-CASCADE = 0
-FREECELL = 1
-FOUNDATION = 2
-
-RawMove = tuple[int, int, int, int, int]
-
-_CARD_BITS = 6
-_CARD_MASK = (1 << _CARD_BITS) - 1
-_CASCADE_LEN_BITS = 4
-_FOUNDATION_BITS = 4
 
 
 def _slot_mask(bit_width: int, index: int) -> int:
 	return ((1 << bit_width) - 1) << (index * bit_width)
 
-_SLOT_MASKS_CASCADE_LEN = tuple(_slot_mask(_CASCADE_LEN_BITS, i) for i in range(8))
-_SLOT_MASKS_CARD = tuple(_slot_mask(_CARD_BITS, i) for i in range(8))
-_SLOT_MASKS_FOUNDATION = tuple(_slot_mask(_FOUNDATION_BITS, i) for i in range(4))
+_SLOT_MASKS_CASCADE_LEN = tuple(_slot_mask(CASCADE_LEN_BITS, i) for i in range(8))
+_SLOT_MASKS_CARD = tuple(_slot_mask(CARD_BITS, i) for i in range(8))
+_SLOT_MASKS_FOUNDATION = tuple(_slot_mask(FOUNDATION_BITS, i) for i in range(4))
 
 
 def _new_state(state: "PackedState", *, cascade_words: tuple[int, ...], cascade_lengths: int, freecells: int, foundations: int) -> "PackedState":
@@ -57,11 +60,11 @@ def move_packed_cascade_to_freecell(
 		raise ValueError("Destination freecell is occupied")
 
 	source_word = state.cascade_words[cascade_index]
-	top_shift = (source_len - 1) * _CARD_BITS
-	moving = (source_word >> top_shift) & _CARD_MASK
+	top_shift = (source_len - 1) * CARD_BITS
+	moving = (source_word >> top_shift) & CARD_MASK
 
 	source_new_len = source_len - 1
-	source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
+	source_keep_mask = (1 << (source_new_len * CARD_BITS)) - 1 if source_new_len > 0 else 0
 	source_new_word = source_word & source_keep_mask
 
 	new_words = list(state.cascade_words)
@@ -70,13 +73,13 @@ def move_packed_cascade_to_freecell(
 	new_lengths = (
 		state.cascade_lengths
 		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
-		| (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
+		| (source_new_len << (cascade_index * CASCADE_LEN_BITS))
 	)
 
 	new_freecells = (
 		state.freecells
 		& ~_SLOT_MASKS_CARD[freecell_index]
-		| (moving << (freecell_index * _CARD_BITS))
+		| (moving << (freecell_index * CARD_BITS))
 	)
 
 	return _new_state(
@@ -105,7 +108,7 @@ def move_packed_freecell_to_cascade(
 		raise ValueError("Illegal placement on cascade")
 
 	dest_new_len = dest_len + 1
-	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * _CARD_BITS))
+	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
 
 	new_words = list(state.cascade_words)
 	new_words[cascade_index] = dest_new_word
@@ -113,11 +116,11 @@ def move_packed_freecell_to_cascade(
 	new_lengths = (
 		state.cascade_lengths
 		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
-		| (dest_new_len << (cascade_index * _CASCADE_LEN_BITS))
+		| (dest_new_len << (cascade_index * CASCADE_LEN_BITS))
 	)
 
 	new_freecells = state.freecells & ~_SLOT_MASKS_CARD[freecell_index]
-	new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
+	new_freecells |= EMPTY_CARD_CODE << (freecell_index * CARD_BITS)
 
 	return _new_state(
 		state,
@@ -139,15 +142,15 @@ def move_packed_cascade_to_foundation(
 		raise ValueError("Source cascade is empty")
 
 	source_word = state.cascade_words[cascade_index]
-	top_shift = (source_len - 1) * _CARD_BITS
-	moving = (source_word >> top_shift) & _CARD_MASK
+	top_shift = (source_len - 1) * CARD_BITS
+	moving = (source_word >> top_shift) & CARD_MASK
 	suit_index = card_code_suit_index(moving)
 	current_rank = state.foundation_rank(suit_index)
 	if validate and not can_move_to_foundation_code(moving, current_rank):
 		raise ValueError("Card cannot be moved to foundation")
 
 	source_new_len = source_len - 1
-	source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
+	source_keep_mask = (1 << (source_new_len * CARD_BITS)) - 1 if source_new_len > 0 else 0
 	source_new_word = source_word & source_keep_mask
 
 	new_words = list(state.cascade_words)
@@ -156,11 +159,11 @@ def move_packed_cascade_to_foundation(
 	new_lengths = (
 		state.cascade_lengths
 		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
-		| (source_new_len << (cascade_index * _CASCADE_LEN_BITS))
+		| (source_new_len << (cascade_index * CASCADE_LEN_BITS))
 	)
 
 	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
-	new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
+	new_foundations |= ((current_rank + 1) << (suit_index * FOUNDATION_BITS))
 
 	return _new_state(
 		state,
@@ -187,10 +190,10 @@ def move_packed_freecell_to_foundation(
 		raise ValueError("Card cannot be moved to foundation")
 
 	new_freecells = state.freecells & ~_SLOT_MASKS_CARD[freecell_index]
-	new_freecells |= EMPTY_CARD_CODE << (freecell_index * _CARD_BITS)
+	new_freecells |= EMPTY_CARD_CODE << (freecell_index * CARD_BITS)
 
 	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
-	new_foundations |= ((current_rank + 1) << (suit_index * _FOUNDATION_BITS))
+	new_foundations |= ((current_rank + 1) << (suit_index * FOUNDATION_BITS))
 
 	return _new_state(
 		state,
@@ -221,12 +224,12 @@ def move_packed_cascade_to_cascade(
 		raise ValueError("Source cascade does not contain enough cards")
 
 	source_word = state.cascade_words[source_index]
-	moving_shift = (source_len - count) * _CARD_BITS
-	moving_mask = (1 << (count * _CARD_BITS)) - 1
+	moving_shift = (source_len - count) * CARD_BITS
+	moving_mask = (1 << (count * CARD_BITS)) - 1
 	moving_bits = (source_word >> moving_shift) & moving_mask
 
 	if validate:
-		moving_stack = tuple((moving_bits >> (i * _CARD_BITS)) & _CARD_MASK for i in range(count))
+		moving_stack = tuple((moving_bits >> (i * CARD_BITS)) & CARD_MASK for i in range(count))
 		if not is_descending_alternating_codes(moving_stack):
 			raise ValueError("Moving stack is not in descending alternating order")
 
@@ -241,9 +244,9 @@ def move_packed_cascade_to_cascade(
 			raise ValueError("Illegal placement on destination cascade")
 
 	source_new_len = source_len - count
-	source_keep_mask = (1 << (source_new_len * _CARD_BITS)) - 1 if source_new_len > 0 else 0
+	source_keep_mask = (1 << (source_new_len * CARD_BITS)) - 1 if source_new_len > 0 else 0
 	source_new_word = source_word & source_keep_mask
-	destination_new_word = state.cascade_words[destination_index] | (moving_bits << (destination_len * _CARD_BITS))
+	destination_new_word = state.cascade_words[destination_index] | (moving_bits << (destination_len * CARD_BITS))
 
 	new_words = list(state.cascade_words)
 	new_words[source_index] = source_new_word
@@ -251,9 +254,9 @@ def move_packed_cascade_to_cascade(
 
 	new_lengths = state.cascade_lengths
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[source_index]
-	new_lengths |= source_new_len << (source_index * _CASCADE_LEN_BITS)
+	new_lengths |= source_new_len << (source_index * CASCADE_LEN_BITS)
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[destination_index]
-	new_lengths |= (destination_len + count) << (destination_index * _CASCADE_LEN_BITS)
+	new_lengths |= (destination_len + count) << (destination_index * CASCADE_LEN_BITS)
 
 	return _new_state(
 		state,

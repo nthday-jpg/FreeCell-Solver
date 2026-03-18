@@ -6,7 +6,8 @@ from time import perf_counter
 import tracemalloc
 from typing import Iterator
 
-from ..core.card import EMPTY_CARD_CODE, card_code_suit_index
+from ..core.constants import EMPTY_CARD_CODE, RawMove
+from ..core.card import card_code_suit_index
 from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from ..core.packed_state import PackedState
 from ..core.rules import (
@@ -16,8 +17,6 @@ from ..core.rules import (
 	max_movable_cards,
 )
 from ..core.state import Move
-
-RawMove = tuple[int, int, int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
