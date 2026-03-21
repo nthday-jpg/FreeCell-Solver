@@ -24,7 +24,7 @@ class UCSSolverCorrectnessTests(unittest.TestCase):
             foundations=(13, 13, 13, 13)
         ).to_packed()
 
-        result = UCSSolver().solve(state)
+        result = UCSSolver(max_expansions=10000).solve(state)
 
         self.assertTrue(result.solved)
         self.assertEqual(result.move_count, 0)
@@ -39,7 +39,7 @@ class UCSSolverCorrectnessTests(unittest.TestCase):
             foundations=(13, 13, 13, 12)
         ).to_packed()
 
-        result = UCSSolver().solve(state)
+        result = UCSSolver(max_expansions=10000).solve(state)
 
         self.assertTrue(result.solved)
         self.assertEqual(result.move_count, 1)
@@ -49,19 +49,19 @@ class UCSSolverCorrectnessTests(unittest.TestCase):
         for move in result.moves:
             current = current.apply_move(move)
         
-        self.assertTrue(current.is_victory())
+        self.assertTrue(current.is_victory)
 
     def test_replay_moves_from_seed_is_legal_if_solved(self) -> None:
         # Use a real seeded layout; this test validates path correctness when solver finds one.
         initial = GameState.initial(seed=1).to_packed()
 
-        result = UCSSolver().solve(initial)
+        result = UCSSolver(max_expansions=10000).solve(initial)
 
         if result.solved:
             current = initial
             for move in result.moves:
                 current = current.apply_move(move)
-            self.assertTrue(current.is_victory())
+            self.assertTrue(current.is_victory)
         else:
             # Accept unsolved for now; still a valid output state for bounded implementations.
             self.assertEqual(result.moves, ())
@@ -87,7 +87,7 @@ class UCSSolverCorrectnessTests(unittest.TestCase):
             foundations=(0, 0, 0, 0),
         ).to_packed()
 
-        result = UCSSolver().solve(state)
+        result = UCSSolver(max_expansions=10000).solve(state)
 
         self.assertFalse(result.solved)
         self.assertEqual(result.moves, ())\
