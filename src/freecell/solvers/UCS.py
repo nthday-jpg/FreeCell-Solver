@@ -18,8 +18,8 @@ class UCSSolver(BaseSolver):
             )
         
         tie = count()
-        frontier: list[tuple[int, int, PackedState]] = [(0, 0, initial_state)]
-        heapq.heappush(frontier, (0, 0, initial_state))
+        frontier: list[tuple[int, int, PackedState]] = []
+        heapq.heappush(frontier, (0, next(tie), initial_state))
         best_cost: dict[PackedState, int] = {initial_state: 0} # reached
         parents: dict[PackedState, PackedState | None] = {initial_state: None}
         parent_moves: dict[PackedState, RawMove] = {}
@@ -38,8 +38,8 @@ class UCSSolver(BaseSolver):
             if self.is_goal(state):
                 return self.build_result(
                     solved=True,
-                    moves=(),
-                    expanded_nodes=0,
+                    moves=self._reconstruct_moves(state, parents, parent_moves),
+                    expanded_nodes=expanded_nodes,
                     elapsed_seconds=perf_counter() - started
                 )
 
