@@ -66,6 +66,21 @@ class GameState:
 
     def apply_move(self, move: Move) -> "GameState":
         return self.to_packed().apply_move(move).to_game_state()
+    
+    def move_cascade_to_freecell(self, cascade_index: int, freecell_index: int) -> "GameState":
+        return self.to_packed().move_cascade_to_freecell(cascade_index, freecell_index).to_game_state()
+
+    def move_freecell_to_cascade(self, freecell_index: int, cascade_index: int) -> "GameState":
+        return self.to_packed().move_freecell_to_cascade(freecell_index, cascade_index).to_game_state()
+
+    def move_cascade_to_foundation(self, cascade_index: int) -> "GameState":
+        return self.to_packed().move_cascade_to_foundation(cascade_index).to_game_state()
+
+    def move_freecell_to_foundation(self, freecell_index: int) -> "GameState":
+        return self.to_packed().move_freecell_to_foundation(freecell_index).to_game_state()
+
+    def move_cascade_to_cascade(self, source_index: int, destination_index: int, count: int = 1) -> "GameState":
+        return self.to_packed().move_cascade_to_cascade(source_index, destination_index, count=count).to_game_state()
 
     def foundation_complete(self) -> bool:
         return self.to_packed().is_victory

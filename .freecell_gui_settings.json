@@ -1,0 +1,8 @@
+{
+  "music_volume": 0.35,
+  "sfx_volume": 0.55,
+  "music_muted": false,
+  "sfx_muted": false,
+  "max_expansions": 24175,
+  "preferred_solver": "UCS"
+}
