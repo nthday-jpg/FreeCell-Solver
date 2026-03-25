@@ -166,13 +166,28 @@ class PackedState:
         return (self.freecells >> (index * CARD_BITS)) & CARD_MASK
 
     def freecell_count_empty(self) -> int:
-        count = 0
-        for i in range(FREECELL_COUNT):
-            if self.freecell(i) == EMPTY_CARD_CODE:
-                count+=1
-        return count
+        v = self.freecells
+        # Identify positions where all 6 bits are 1
+        # We shift and AND. If a bit stays 1, it means it and its neighbors were 1.
+        all_ones = v & (v >> 1) & (v >> 2) & (v >> 3) & (v >> 4) & (v >> 5)
+        
+        # The mask 0x41041 aligns with the 1st bit of each 6-bit slot:
+        # (1 << 0) | (1 << 6) | (1 << 12) | (1 << 18)
+        return (all_ones & 0x41041).bit_count()
 
         # return sum(1 for index in range(FREECELL_COUNT) if self.freecell(index) == EMPTY_CARD_CODE)
+
+    def cards_remaining(self) -> int:
+        v = self.foundations
+        # Step 1: Sum adjacent 4-bit fields into 8-bit fields
+        # (max value 13+13 = 26, fits in 8 bits)
+        v = (v & 0x0F0F) + ((v >> 4) & 0x0F0F)
+        
+        # Step 2: Sum the two 8-bit fields into the final result
+        # (max value 26+26 = 52, fits in 8 bits)
+        cards_in_foundation = (v + (v >> 8)) & 0xFF
+        
+        return 52 - cards_in_foundation
 
     def foundation_rank(self, suit_index: int) -> int:
         return (self.foundations >> (suit_index * FOUNDATION_BITS)) & 0xF
@@ -201,11 +216,17 @@ class PackedState:
         return tuple((tail_bits >> (offset * CARD_BITS)) & CARD_MASK for offset in range(count))
 
     def cascade_count_empty(self) -> int:
-        count = 0
-        for i in range(CASCADE_COUNT):
-            if ((self.cascade_lengths >> (i * CASCADE_LEN_BITS)) & 0xF) == 0:
-                count += 1
-        return count
+        v = self.cascade_lengths
+        # Combine all bits in each 4-bit nibble into the lowest bit of the nibble
+        # If any bit was 1, the result's LSB for that nibble will be 1
+        any_bit_set = (v | (v >> 1) | (v >> 2) | (v >> 3)) & 0x11111111
+        
+        # Flip the bits and mask to look at only the LSB of each nibble
+        # A '1' now represents a nibble that was originally '0000'
+        zero_nibbles = (~any_bit_set) & 0x11111111
+        
+        # Count the set bits (requires Python 3.10+)
+        return zero_nibbles.bit_count()
 
         # return sum(1 for index in range(CASCADE_COUNT) if self.cascade_length(index) == 0)
 

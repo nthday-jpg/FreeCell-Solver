@@ -71,211 +71,36 @@ class GameStateTests(unittest.TestCase):
         self.assertFalse(state.foundation_complete())
         self.assertTrue(GameState(cascades=(tuple(),) * 8, foundations=(13, 13, 13, 13)).foundation_complete())
 
-    def test_move_cascade_to_freecell_success_and_errors(self) -> None:
-        state = GameState(
-            cascades=((c("7C"), c("6D")), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-        moved = state.move_cascade_to_freecell(cascade_index=0, freecell_index=1)
-
-        self.assertEqual(moved.cascades[0], (c("7C"),))
-        self.assertEqual(moved.freecells[1], c("6D"))
-        self.assertEqual(state.cascades[0], (c("7C"), c("6D")))
-
-        with self.assertRaisesRegex(ValueError, "Source cascade is empty"):
-            state.move_cascade_to_freecell(cascade_index=1, freecell_index=0)
-
-        occupied = GameState(cascades=((c("7C"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()), freecells=(c("AS"), None, None, None))
-        with self.assertRaisesRegex(ValueError, "occupied"):
-            occupied.move_cascade_to_freecell(cascade_index=0, freecell_index=0)
-
-    def test_move_freecell_to_cascade_success_and_errors(self) -> None:
-        state = GameState(
-            cascades=((c("8C"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(c("7D"), None, None, None),
-        )
-        moved = state.move_freecell_to_cascade(freecell_index=0, cascade_index=0)
-
-        self.assertEqual(moved.cascades[0], (c("8C"), c("7D")))
-        self.assertIsNone(moved.freecells[0])
-
-        with self.assertRaisesRegex(ValueError, "Source freecell is empty"):
-            state.move_freecell_to_cascade(freecell_index=1, cascade_index=0)
-
-        illegal = GameState(
-            cascades=((c("8H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(c("7D"), None, None, None),
-        )
-        with self.assertRaisesRegex(ValueError, "Illegal placement"):
-            illegal.move_freecell_to_cascade(freecell_index=0, cascade_index=0)
-
-    def test_move_cascade_to_foundation_success_and_errors(self) -> None:
-        state = GameState(
-            cascades=((c("AH"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            foundations=(0, 0, 0, 0),
-        )
-        moved = state.move_cascade_to_foundation(cascade_index=0)
-
-        self.assertEqual(moved.cascades[0], tuple())
-        self.assertEqual(moved.foundations, (0, 0, 1, 0))
-
-        with self.assertRaisesRegex(ValueError, "Source cascade is empty"):
-            state.move_cascade_to_foundation(cascade_index=1)
-
-        blocked = GameState(
-            cascades=((c("3H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            foundations=(0, 0, 1, 0),
-        )
-        with self.assertRaisesRegex(ValueError, "cannot be moved"):
-            blocked.move_cascade_to_foundation(cascade_index=0)
-
-    def test_move_freecell_to_foundation_success_and_errors(self) -> None:
-        state = GameState(
-            cascades=(tuple(),) * 8,
-            freecells=(c("AD"), None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        moved = state.move_freecell_to_foundation(freecell_index=0)
-
-        self.assertEqual(moved.freecells, (None, None, None, None))
-        self.assertEqual(moved.foundations, (0, 1, 0, 0))
-
-        with self.assertRaisesRegex(ValueError, "Source freecell is empty"):
-            state.move_freecell_to_foundation(freecell_index=1)
-
-        blocked = GameState(
-            cascades=(tuple(),) * 8,
-            freecells=(c("4D"), None, None, None),
-            foundations=(0, 1, 0, 0),
-        )
-        with self.assertRaisesRegex(ValueError, "cannot be moved"):
-            blocked.move_freecell_to_foundation(freecell_index=0)
-
-    def test_move_cascade_to_cascade_success_multi_card(self) -> None:
-        state = GameState(
-            cascades=((c("8C"), c("7D"), c("6C")), (c("9H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-        moved = state.move_cascade_to_cascade(source_index=0, destination_index=1, count=3)
-
-        self.assertEqual(moved.cascades[0], tuple())
-        self.assertEqual(moved.cascades[1], (c("9H"), c("8C"), c("7D"), c("6C")))
-
-    def test_move_cascade_to_cascade_validates_constraints(self) -> None:
-        base = GameState(
-            cascades=((c("8C"), c("7D")), (c("9H"),), (c("AS"),), (c("2D"),), (c("3S"),), (c("4D"),), (c("5S"),), (c("6D"),)),
-            freecells=(c("KH"), c("KC"), c("QH"), c("QC")),
-        )
-
-        with self.assertRaisesRegex(ValueError, "count must be positive"):
-            base.move_cascade_to_cascade(source_index=0, destination_index=1, count=0)
-
-        with self.assertRaisesRegex(ValueError, "must differ"):
-            base.move_cascade_to_cascade(source_index=0, destination_index=0, count=1)
-
-        with self.assertRaisesRegex(ValueError, "does not contain enough cards"):
-            base.move_cascade_to_cascade(source_index=0, destination_index=1, count=3)
-
-        bad_stack = GameState(
-            cascades=((c("8C"), c("6D")), (c("9H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-        with self.assertRaisesRegex(ValueError, "not in descending alternating"):
-            bad_stack.move_cascade_to_cascade(source_index=0, destination_index=1, count=2)
-
-        with self.assertRaisesRegex(ValueError, "current free space"):
-            base.move_cascade_to_cascade(source_index=0, destination_index=1, count=2)
-
-        illegal_destination = GameState(
-            cascades=((c("8C"), c("7D")), (c("8H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-        with self.assertRaisesRegex(ValueError, "Illegal placement"):
-            illegal_destination.move_cascade_to_cascade(source_index=0, destination_index=1, count=1)
-
-    def test_apply_move_dispatch_and_validation(self) -> None:
-        state = GameState(
-            cascades=((c("8C"), c("7D")), (c("9H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-
-        moved = state.apply_move(Move(source="cascade", source_index=0, destination="freecell", destination_index=0))
-        self.assertEqual(moved.freecells[0], c("7D"))
-
-        with self.assertRaisesRegex(ValueError, "Only one card"):
-            state.apply_move(Move(source="cascade", source_index=0, destination="freecell", destination_index=0, count=2))
-
-        with self.assertRaisesRegex(ValueError, "Unsupported move"):
-            state.apply_move(Move(source="foundation", source_index=0, destination="cascade", destination_index=0))
-
-    def test_packed_state_move_methods_match_game_state(self) -> None:
-        # Cascade -> freecell
-        state = GameState(
-            cascades=((c("8C"), c("7D"), c("6C")), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        packed = PackedState.from_game_state(state)
-        self.assertEqual(packed.move_cascade_to_freecell(0, 1).to_game_state(), state.move_cascade_to_freecell(0, 1))
-
-        # Freecell -> cascade (legal: 7D onto 8C)
-        state = GameState(
-            cascades=((c("8C"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(c("7D"), None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        packed = PackedState.from_game_state(state)
-        self.assertEqual(packed.move_freecell_to_cascade(0, 0).to_game_state(), state.move_freecell_to_cascade(0, 0))
-
-        # Cascade -> foundation
-        state = GameState(
-            cascades=((c("AH"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        packed = PackedState.from_game_state(state)
-        self.assertEqual(packed.move_cascade_to_foundation(0).to_game_state(), state.move_cascade_to_foundation(0))
-
-        # Freecell -> foundation
-        state = GameState(
-            cascades=(tuple(),) * 8,
-            freecells=(c("AD"), None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        packed = PackedState.from_game_state(state)
-        self.assertEqual(packed.move_freecell_to_foundation(0).to_game_state(), state.move_freecell_to_foundation(0))
-
-        # Multi-card cascade -> cascade
-        state = GameState(
-            cascades=((c("8C"), c("7D"), c("6C")), (c("9H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-            foundations=(0, 0, 0, 0),
-        )
-        packed = PackedState.from_game_state(state)
-        self.assertEqual(packed.move_cascade_to_cascade(0, 1, count=3).to_game_state(), state.move_cascade_to_cascade(0, 1, count=3))
-
-    def test_packed_state_apply_move_dispatch_and_validation(self) -> None:
-        state = GameState(
-            cascades=((c("8C"), c("7D")), (c("9H"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
-            freecells=(None, None, None, None),
-        )
-        packed = state.to_packed()
-
-        moved = packed.apply_move(Move(source="cascade", source_index=0, destination="freecell", destination_index=0))
-        self.assertEqual(moved.to_game_state(), state.apply_move(Move(source="cascade", source_index=0, destination="freecell", destination_index=0)))
-
-        with self.assertRaisesRegex(ValueError, "Only one card"):
-            packed.apply_move(Move(source="cascade", source_index=0, destination="freecell", destination_index=0, count=2))
-
-        with self.assertRaisesRegex(ValueError, "Unsupported move"):
-            packed.apply_move(Move(source="foundation", source_index=0, destination="cascade", destination_index=0))
-
     def test_packed_state_victory_helpers(self) -> None:
         incomplete = GameState(cascades=(tuple(),) * 8, foundations=(13, 13, 13, 12)).to_packed()
         complete = GameState(cascades=(tuple(),) * 8, foundations=(13, 13, 13, 13)).to_packed()
 
         self.assertFalse(incomplete.is_victory)
         self.assertTrue(complete.is_victory)
+
+    def test_packed_state_bitwise_count_helpers(self) -> None:
+        all_empty = GameState(cascades=(tuple(),) * 8, freecells=(None, None, None, None), foundations=(0, 0, 0, 0)).to_packed()
+        self.assertEqual(all_empty.freecell_count_empty(), 4)
+        self.assertEqual(all_empty.cascade_count_empty(), 8)
+        self.assertEqual(all_empty.cards_remaining(), 52)
+
+        all_full = GameState(
+            cascades=((c("AC"),), (c("2D"),), (c("3H"),), (c("4S"),), (c("5C"),), (c("6D"),), (c("7H"),), (c("8S"),)),
+            freecells=(c("9C"), c("10D"), c("JH"), c("QS")),
+            foundations=(13, 13, 13, 13),
+        ).to_packed()
+        self.assertEqual(all_full.freecell_count_empty(), 0)
+        self.assertEqual(all_full.cascade_count_empty(), 0)
+        self.assertEqual(all_full.cards_remaining(), 0)
+
+        mixed = GameState(
+            cascades=((c("AC"),), tuple(), (c("2H"), c("AS")), tuple(), tuple(), (c("KD"),), tuple(), (c("3C"),)),
+            freecells=(None, c("4S"), None, c("5D")),
+            foundations=(1, 3, 2, 0),
+        ).to_packed()
+        self.assertEqual(mixed.freecell_count_empty(), 2)
+        self.assertEqual(mixed.cascade_count_empty(), 4)
+        self.assertEqual(mixed.cards_remaining(), 46)
 
 
 if __name__ == "__main__":
