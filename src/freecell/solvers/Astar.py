@@ -2,8 +2,23 @@ from freecell.solvers.BestFS import BestFSSolver
 from ..core.move_engine import FREECELL, FOUNDATION
 from .base import RawMove
 from ..core import PackedState
+from ..core import GameState
 
 class AstarSolver(BestFSSolver):
+
+    def is_descending_alternating(self, card1: Card, card2: Card) -> bool:
+        return card1.rank == card2.rank + 1 and card1.color != card2.color
+
+    def disorder_count(self) -> int:
+        total = 0
+        for cascade in self.cascades:
+            if len(cascade) <= 1:
+                continue
+            for i in range(len(cascade) - 1):
+                if not self.is_descending_alternating(cascade[i], cascade[i+1]):
+                    total += len(cascade) - i - 1
+                    break
+        return total
     def evaluate(
         self, 
         parent_g: int, 
@@ -15,6 +30,7 @@ class AstarSolver(BestFSSolver):
         g: number of moves taken from start.
         h: estimated moves to goal.
         """
+        gamestate = state.to_game_state()
         # 1. Calculate the 'Step Cost' (Weight)
         weight = 1
         if move:
@@ -26,12 +42,10 @@ class AstarSolver(BestFSSolver):
                 weight = 3 # Discouraged (resource consumption)
         new_g = parent_g + weight
         # 1. Higher foundation count reduces cost
-        foundation_count = self.get_foundation_count(state) 
+        remain_cards = gamestate.cards_remaining
         # 2. Empty freecells are good for mobility
-        empty_freecells = self.get_empty_freecells(state)
+        empty_freecells = gamestate.empty_freecell_count()
         # 3. Blocked cards (cards in cascades that are not in order)
-        misplaced_cards = self.get_misplaced_count(state)
-        h = (52 - foundation_count) * 1.5  # Weight foundation highly
-        h += misplaced_cards * 2
-        h -= empty_freecells * 3
-        return (new_g + h, weight)
+        misplaced_cards = gamestate.disorder_count()
+        h = remain_cards + misplaced_cards - empty_freecells
+        return (new_g + h * 2, weight)

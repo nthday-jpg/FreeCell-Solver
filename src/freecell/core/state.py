@@ -72,3 +72,17 @@ class GameState:
 
     def foundation_summary(self) -> dict[str, int]:
         return {suit: self.foundations[idx] for idx, suit in enumerate(SUITS)}
+    
+    def is_descending_alternating(self, card1: Card, card2: Card) -> bool:
+        return card1.rank == card2.rank + 1 and card1.color != card2.color
+
+    def disorder_count(self) -> int:
+        total = 0
+        for cascade in self.cascades:
+            if len(cascade) <= 1:
+                continue
+            for i in range(len(cascade) - 1):
+                if not self.is_descending_alternating(cascade[i], cascade[i+1]):
+                    total += len(cascade) - i - 1
+                    break
+        return total
