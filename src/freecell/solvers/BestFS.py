@@ -8,6 +8,8 @@ from .base import BaseSolver, SolveResult, RawMove
 from ..core import PackedState
 
 class BestFSSolver(BaseSolver):
+    def __init__(self, max_expansions: int | None = None):
+        self.max_expansions = max_expansions
     @abstractmethod
     def evaluate(
         self, 
@@ -40,7 +42,7 @@ class BestFSSolver(BaseSolver):
         frontier = []
         
         # Initial g is 0. Initial f depends on the heuristic.
-        initial_f = self.evaluate(0, None, initial_state)
+        initial_f, _ = self.evaluate(0, None, initial_state)
         heapq.heappush(frontier, (initial_f, next(tie), initial_state))
         
         # Track the best (shortest) distance to each state
@@ -63,6 +65,13 @@ class BestFSSolver(BaseSolver):
                 )
 
             expanded_nodes += 1
+            if(self.max_expansions is not None and expanded_nodes >= self.max_expansions):
+                return self.build_result(
+                    solved=False,
+                    moves=(),
+                    expanded_nodes=expanded_nodes,
+                    elapsed_seconds=perf_counter() - started
+                )
             current_g = g_score[state]
             prev_move = parent_moves.get(state)
 
@@ -72,7 +81,7 @@ class BestFSSolver(BaseSolver):
                     continue
 
                 next_state = self.transition(state, move, validate=False)
-                # For optimal path, each move costs 1
+       
                 f_next, weight = self.evaluate(current_g, move, next_state)
                 # If this is a new state or a shorter path to an existing state
                 if next_state not in g_score or current_g + weight < g_score[next_state]:
