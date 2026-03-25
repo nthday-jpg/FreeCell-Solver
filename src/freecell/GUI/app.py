@@ -50,7 +50,6 @@ class AudioManager:
         self.sfx_cache: dict[str, pygame.mixer.Sound] = {}
         self.current_music = ""
         self.enabled = False
-
         try:
             pygame.mixer.init()
             self.enabled = True
@@ -118,6 +117,10 @@ class FreeCellApp:
         self.solver_worker = SolverWorker()
         self.solver_solution: tuple[Move, ...] = ()
         self.solver_solution_index = 0
+        self.is_dragging = False
+        self.drag_offset = (0, 0)
+        self.drag_pos = (0, 0)
+
 
     def run(self) -> None:
         running = True
@@ -174,7 +177,6 @@ class FreeCellApp:
 
         update = self.solver_worker.poll()
         if update.status == "running":
-            self.last_solver_status = f"Solver running... {update.elapsed_seconds:.1f}s"
             return
         if update.status == "done":
             self.solver_solution = update.moves
@@ -371,14 +373,13 @@ class FreeCellApp:
             if self.session.redo():
                 self._set_message("Redo successful.")
 
-        board_click = None
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                board_click = event.pos
-                break
-
-        if board_click is not None:
-            self._handle_board_click(board_click)
+                self._handle_mouse_down(event.pos)
+            elif event.type == pygame.MOUSEMOTION:
+                self._handle_mouse_motion(event.pos)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self._handle_mouse_up(event.pos)
 
     def _apply_solver_step(self) -> bool:
         if self.solver_solution_index >= len(self.solver_solution):
@@ -397,6 +398,99 @@ class FreeCellApp:
             SUCCESS_COLOR,
         )
         return True
+    
+    def _handle_mouse_down(self, mouse_pos: tuple[int, int]) -> None:
+        targets = self._board_targets()
+        target = next((item for item in targets if item[2].collidepoint(mouse_pos)), None)
+
+        if target is None:
+            self.selected_source = None # Click ra ngoài màn hình -> Hủy chọn
+            return
+
+        pile_type, pile_index, rect = target
+
+        # Nếu đã chọn 1 lá trước đó và giờ click sang chỗ khác (Hỗ trợ Click-to-move)
+        if self.selected_source and self.selected_source != (pile_type, pile_index):
+            self._attempt_move(self.selected_source, (pile_type, pile_index))
+            return
+
+        # Bắt đầu nhấc bài lên (Drag)
+        if pile_type == "cascade" and self.session.state.cascade_top(pile_index) is not None:
+            self.selected_source = (pile_type, pile_index)
+            self.is_dragging = True
+            self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - rect.y)
+            self.drag_pos = mouse_pos
+            self._set_message(f"Selected cascade {pile_index}.")
+            
+        elif pile_type == "freecell" and self.session.state.freecells[pile_index] is not None:
+            self.selected_source = (pile_type, pile_index)
+            self.is_dragging = True
+            self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - rect.y)
+            self.drag_pos = mouse_pos
+            self._set_message(f"Selected freecell {pile_index}.")
+
+    def _handle_mouse_motion(self, mouse_pos: tuple[int, int]) -> None:
+        if self.is_dragging:
+            self.drag_pos = mouse_pos
+
+    def _handle_mouse_up(self, mouse_pos: tuple[int, int]) -> None:
+        if not self.is_dragging:
+            return
+
+        self.is_dragging = False
+        targets = self._board_targets()
+        target = next((item for item in targets if item[2].collidepoint(mouse_pos)), None)
+
+        if target is None:
+            self.selected_source = None
+            return # Thả ra ngoài thì tự động snap về chỗ cũ
+
+        dest_type, dest_index, _ = target
+
+        # Nếu thả đúng chỗ cũ thì không làm gì (giữ nguyên trạng thái để chờ click-to-move)
+        if self.selected_source == (dest_type, dest_index):
+            return
+
+        # Gọi hàm kiểm tra di chuyển
+        self._attempt_move(self.selected_source, (dest_type, dest_index))
+
+    def _attempt_move(self, source: tuple[str, int], dest: tuple[str, int]) -> None:
+        source_type, source_index = source
+        dest_type, dest_index = dest
+        destination_index = 0 if dest_type == "foundation" else dest_index
+
+        move = Move(
+            source=source_type, source_index=source_index,
+            destination=dest_type, destination_index=destination_index,
+            count=1,
+        )
+
+        legal_moves = get_legal_moves(self.session.state.to_packed())
+        is_legal = any(
+            candidate.source == move.source and candidate.source_index == move.source_index
+            and candidate.destination == move.destination and candidate.destination_index == move.destination_index
+            and candidate.count == move.count
+            for candidate in legal_moves
+        )
+        
+        if not is_legal:
+            self._set_message("Illegal move.", ERROR_COLOR)
+            self.audio.play_sfx("move_fail")
+            self.selected_source = None
+            return
+
+        success, error = self.session.apply_move(move)
+        if success:
+            self._set_message("Move applied.", SUCCESS_COLOR)
+            self.audio.play_sfx("move_ok")
+            self.selected_source = None
+            if self.session.state.is_victory:
+                self.audio.play_music("win")
+                self._set_message("Congratulations! You won!", SUCCESS_COLOR)
+        else:
+            self._set_message(f"Move failed: {error}", ERROR_COLOR)
+            self.audio.play_sfx("move_fail")
+            self.selected_source = None
 
     def _game_buttons(self, events: list[pygame.event.Event]) -> str | None:
         defs = [
@@ -494,10 +588,11 @@ class FreeCellApp:
 
         header = self.small_font.render(
             f"Mode: {self.mode.upper()} | Moves {self.session.move_count} | Time {self.session.elapsed_seconds:.1f}s",
-            True,
-            TEXT_COLOR,
+            True, TEXT_COLOR,
         )
         self.screen.blit(header, (40, 70))
+
+        dragged_card = None # Chuẩn bị lưu lá bài đang kéo
 
         # Freecells
         for index, card in enumerate(self.session.state.freecells):
@@ -509,8 +604,14 @@ class FreeCellApp:
                 label = self.small_font.render(f"F{index}", True, TEXT_COLOR)
                 self.screen.blit(label, (rect.x + 34, rect.y + 56))
             else:
-                card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
-                self._render_card(rect, card.short_name, card_color, selected=is_selected)
+                if self.is_dragging and is_selected:
+                    dragged_card = card
+                    # Vẽ một ô trống mờ mờ thay thế vị trí gốc của lá bài
+                    pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
+                    pygame.draw.rect(self.screen, (190, 230, 204), rect, 2, border_radius=10)
+                else:
+                    card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
+                    self._render_card(rect, card.short_name, card_color, selected=is_selected)
 
         # Foundations
         for index, suit in enumerate(SUITS):
@@ -541,9 +642,23 @@ class FreeCellApp:
                 y = 300 + offset * 28
                 rect = pygame.Rect(x, y, 100, 140)
                 selected = self.selected_source == ("cascade", index) and offset == len(cascade) - 1
+                
+                if self.is_dragging and selected:
+                    dragged_card = card
+                    continue # Bỏ qua không vẽ lá này ở vị trí cũ nữa
+
                 card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
                 self._render_card(rect, card.short_name, card_color, selected=selected)
 
+        # Lớp Mới: Vẽ lá bài đang được kéo thả trên cùng
+        if self.is_dragging and dragged_card is not None:
+            drag_x = self.drag_pos[0] - self.drag_offset[0]
+            drag_y = self.drag_pos[1] - self.drag_offset[1]
+            drag_rect = pygame.Rect(drag_x, drag_y, 100, 140)
+            card_color = (196, 38, 38) if dragged_card.color == "red" else (20, 20, 20)
+            self._render_card(drag_rect, dragged_card.short_name, card_color, selected=True)
+
+        # Messages
         if self.message:
             msg = self.body_font.render(self.message, True, self.message_color)
             self.screen.blit(msg, (40, 705))
