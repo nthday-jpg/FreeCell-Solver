@@ -9,10 +9,11 @@ from ..core import PackedState
 
 class BestFSSolver(BaseSolver):
     @abstractmethod
-    def evaluate(self, 
-        g: int, 
-        state: PackedState, 
-        heuristic: Callable[[PackedState], int] | None
+    def evaluate(
+        self, 
+        parent_g: int, 
+        move: RawMove | None,
+        state: PackedState,
     ) -> int:
         """
         Calculates f(n) = g(n) + h(n).
