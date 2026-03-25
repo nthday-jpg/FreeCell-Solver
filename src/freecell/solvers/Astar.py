@@ -1,12 +1,6 @@
-from abc import abstractmethod
-import heapq
-from time import perf_counter
-from itertools import count
-from typing import Callable
-
 from freecell.solvers.BestFS import BestFSSolver
-from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
-from .base import BaseSolver, SolveResult, RawMove
+from ..core.move_engine import FREECELL, FOUNDATION
+from .base import RawMove
 from ..core import PackedState
 
 class AstarSolver(BestFSSolver):
