@@ -69,22 +69,6 @@ class BaseSolver(ABC):
 	def transition(self, state: PackedState, move: RawMove, *, validate: bool = True) -> PackedState:
 		return state.apply_raw_move(move, validate=validate)
 
-	@staticmethod
-	def evaluate_cost(
-		g_cost: int,
-		move: RawMove,
-		next_state: PackedState,
-		heuristic=None,
-	) -> int:
-		"""Return f = g + h for next_state.
-
-		UCS: pass heuristic=None -> h=0. A* provides heuristic(state).
-		Move cost uses `count` (fifth tuple element) as path step cost.
-		"""
-		move_cost = move[4] if move is not None else 0
-		g_next = g_cost + move_cost
-		h_cost = heuristic(next_state) if callable(heuristic) else 0
-		return g_next + h_cost
 
 	def iter_legal_moves(self, state: PackedState) -> Iterator[RawMove]:
 		# Prefer foundation moves first to reduce branching in common strategies.
