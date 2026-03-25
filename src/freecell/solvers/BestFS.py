@@ -14,11 +14,12 @@ class BestFSSolver(BaseSolver):
         parent_g: int, 
         move: RawMove | None,
         state: PackedState,
-    ) -> int:
+    ) -> tuple[int, int]:
         """
         Calculates f(n) = g(n) + h(n).
         g: number of moves taken from start.
         h: estimated moves to goal.
+        Return f_next and new true cost
         """
         pass
 
@@ -39,7 +40,7 @@ class BestFSSolver(BaseSolver):
         frontier = []
         
         # Initial g is 0. Initial f depends on the heuristic.
-        initial_f = self.evaluate(0, initial_state, self.heuristic)
+        initial_f = self.evaluate(0, None, initial_state)
         heapq.heappush(frontier, (initial_f, next(tie), initial_state))
         
         # Track the best (shortest) distance to each state
@@ -72,16 +73,12 @@ class BestFSSolver(BaseSolver):
 
                 next_state = self.transition(state, move, validate=False)
                 # For optimal path, each move costs 1
-                tentative_g = current_g + 1 # Modify cost function
-
+                f_next, weight = self.evaluate(current_g, move, next_state)
                 # If this is a new state or a shorter path to an existing state
-                if next_state not in g_score or tentative_g < g_score[next_state]:
-                    g_score[next_state] = tentative_g
+                if next_state not in g_score or current_g + weight < g_score[next_state]:
+                    g_score[next_state] = current_g + weight
                     parents[next_state] = state
                     parent_moves[next_state] = move
-                    
-                    # Calculate f-score and push to priority queue
-                    f_next = self.evaluate(tentative_g, next_state, self.heuristic)
                     heapq.heappush(frontier, (f_next, next(tie), next_state))
 
         return self.build_result(
