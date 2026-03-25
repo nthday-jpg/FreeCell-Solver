@@ -1,3 +1,5 @@
-"""
-    Minimal runner and main loop here
-"""
+from freecell.GUI.app import run
+
+
+if __name__ == "__main__":
+    run()
