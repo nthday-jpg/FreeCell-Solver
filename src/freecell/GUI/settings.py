@@ -13,7 +13,6 @@ class GuiSettings:
     sfx_volume: float = 0.55
     music_muted: bool = False
     sfx_muted: bool = False
-    max_expansions: int = 30000
     preferred_solver: str = "UCS"
 
 
@@ -32,7 +31,6 @@ def load_settings(path: Path = SETTINGS_FILE) -> GuiSettings:
         sfx_volume=float(data.get("sfx_volume", defaults.sfx_volume)),
         music_muted=bool(data.get("music_muted", defaults.music_muted)),
         sfx_muted=bool(data.get("sfx_muted", defaults.sfx_muted)),
-        max_expansions=int(data.get("max_expansions", defaults.max_expansions)),
         preferred_solver=str(data.get("preferred_solver", defaults.preferred_solver)),
     )
 

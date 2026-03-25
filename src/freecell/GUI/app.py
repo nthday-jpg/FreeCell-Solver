@@ -26,6 +26,7 @@ WARN_COLOR = (255, 216, 120)
 ERROR_COLOR = (255, 160, 160)
 SUCCESS_COLOR = (165, 235, 180)
 
+SOLVER_MAX_EXPANSIONS = 50000
 
 @dataclass(slots=True)
 class Button:
@@ -117,7 +118,6 @@ class FreeCellApp:
         self.solver_worker = SolverWorker()
         self.solver_solution: tuple[Move, ...] = ()
         self.solver_solution_index = 0
-        self.last_solver_status = "idle"
 
     def run(self) -> None:
         running = True
@@ -158,10 +158,15 @@ class FreeCellApp:
         self.solver_solution = ()
         self.solver_solution_index = 0
         self.solver_worker.stop()
-        self.last_solver_status = "idle"
-        # self._set_message(f"Started deal #{self.seed} in {mode} mode.")
         self.scene = "game"
         self.audio.play_music("game")
+
+        if mode == "solver":
+            self.solver_worker.start(
+                self.session.state.to_packed(),
+                self.settings.preferred_solver,
+                SOLVER_MAX_EXPANSIONS,
+            )
 
     def _poll_solver(self) -> None:
         if self.mode != "solver":
@@ -184,7 +189,6 @@ class FreeCellApp:
                     "No solution found within current limit.",
                     WARN_COLOR,
                 )
-            self.last_solver_status = "done"
 
     def _buttons(self, definitions: Iterable[tuple[str, pygame.Rect]], events: list[pygame.event.Event]) -> str | None:
         clicked_pos: tuple[int, int] | None = None
@@ -334,7 +338,6 @@ class FreeCellApp:
         # Vẽ và cập nhật Slider (Tự động canh giữa hoàn hảo nhờ thuật toán Block Layout)
         self.settings.music_volume = self._draw_slider("Music Volume", self.settings.music_volume, 0.0, 1.0, 220)
         self.settings.sfx_volume = self._draw_slider("SFX Volume", self.settings.sfx_volume, 0.0, 1.0, 280)
-        self.settings.max_expansions = self._draw_slider("Max Expansions", self.settings.max_expansions, 5000, 300000, 340)
 
         # Áp dụng ngay âm lượng mới nếu người dùng đang kéo slider
         self.audio.apply_settings()
@@ -367,25 +370,6 @@ class FreeCellApp:
         if button == "Redo":
             if self.session.redo():
                 self._set_message("Redo successful.")
-        # if button == "Auto Foundation":
-        #     self._auto_foundation()
-
-        # if self.mode == "solver":
-        #     if button == "Start Solver":
-        #         self.solver_worker.start(
-        #             self.session.state.to_packed(),
-        #             self.settings.preferred_solver,
-        #             self.settings.max_expansions,
-        #         )
-        #         self._set_message("Solver started in background.")
-        #     elif button == "Stop Solver":
-        #         self.solver_worker.stop()
-        #         self._set_message("Solver stopped.", WARN_COLOR)
-        #     elif button == "Apply Solver Step":
-        #         self._apply_solver_step()
-        #     elif button == "Apply Full Solution":
-        #         while self._apply_solver_step():
-        #             pass
 
         board_click = None
         for event in events:
@@ -395,22 +379,6 @@ class FreeCellApp:
 
         if board_click is not None:
             self._handle_board_click(board_click)
-
-    # def _auto_foundation(self) -> None:
-    #     moved_any = False
-    #     while True:
-    #         legal_moves = get_legal_moves(self.session.state.to_packed())
-    #         foundation_move = next((m for m in legal_moves if m.destination == "foundation"), None)
-    #         if foundation_move is None:
-    #             break
-    #         success, _ = self.session.apply_move(foundation_move)
-    #         if not success:
-    #             break
-    #         moved_any = True
-
-    #     if moved_any:
-    #         self._set_message("Moved cards to foundation automatically.", SUCCESS_COLOR)
-    #         self.audio.play_sfx("move_ok")
 
     def _apply_solver_step(self) -> bool:
         if self.solver_solution_index >= len(self.solver_solution):
@@ -437,15 +405,6 @@ class FreeCellApp:
             ("Undo", pygame.Rect(310, 18, 120, 40)),
             ("Redo", pygame.Rect(445, 18, 120, 40)),
         ]
-        # if self.mode == "solver":
-        #     defs.extend(
-        #         [
-        #             ("Start Solver", pygame.Rect(750, 18, 130, 40)),
-        #             ("Stop Solver", pygame.Rect(890, 18, 120, 40)),
-        #             ("Apply Solver Step", pygame.Rect(1020, 18, 160, 40)),
-        #             ("Apply Full Solution", pygame.Rect(1020, 64, 160, 40)),
-        #         ]
-        #     )
         return self._buttons(defs, events)
 
     def _handle_board_click(self, click_pos: tuple[int, int]) -> None:
@@ -534,19 +493,15 @@ class FreeCellApp:
         self._game_buttons([])
 
         header = self.small_font.render(
-            f"Mode: {self.mode.upper()} | Deal {self.seed} | Moves {self.session.move_count} | Time {self.session.elapsed_seconds:.1f}s",
+            f"Mode: {self.mode.upper()} | Moves {self.session.move_count} | Time {self.session.elapsed_seconds:.1f}s",
             True,
             TEXT_COLOR,
         )
-        self.screen.blit(header, (20, 70))
-
-        if self.mode == "solver":
-            status = self.small_font.render(self.last_solver_status, True, WARN_COLOR)
-            self.screen.blit(status, (20, 95))
+        self.screen.blit(header, (40, 70))
 
         # Freecells
         for index, card in enumerate(self.session.state.freecells):
-            rect = pygame.Rect(70 + index * 140, 120, 100, 140)
+            rect = pygame.Rect(40 + index * 140, 120, 100, 140)
             is_selected = self.selected_source == ("freecell", index)
             if card is None:
                 pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
@@ -559,7 +514,7 @@ class FreeCellApp:
 
         # Foundations
         for index, suit in enumerate(SUITS):
-            rect = pygame.Rect(670 + index * 120, 120, 100, 140)
+            rect = pygame.Rect(620 + index * 120, 120, 100, 140)
             rank = self.session.state.foundations[index]
             if rank == 0:
                 pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
@@ -591,7 +546,7 @@ class FreeCellApp:
 
         if self.message:
             msg = self.body_font.render(self.message, True, self.message_color)
-            self.screen.blit(msg, (20, 705))
+            self.screen.blit(msg, (40, 705))
 
 
 def run() -> None:
