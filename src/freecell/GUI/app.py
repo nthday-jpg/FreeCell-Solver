@@ -122,6 +122,33 @@ class FreeCellApp:
         self.drag_offset = (0, 0)
         self.drag_pos = (0, 0)
 
+        # --- LOAD ẢNH ---
+        self.card_images = {}
+        assets_dir = Path(__file__).resolve().parent / "assets" / "cards"
+
+        suit_folder_map = {"C": "Clubs", "D": "Diamonds", "H": "Hearts", "S": "Spades"}
+        rank_file_map = {
+            1: "ace", 2: "2", 3: "3", 4: "4", 5: "5", 
+            6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 
+            11: "jack", 12: "queen", 13: "king"
+        }
+        
+        for suit in SUITS:
+            for rank in range(1, 14):
+                card_name = f"{RANK_TO_NAME[rank]}{suit}"
+                folder_name = suit_folder_map[suit]
+                file_name = rank_file_map[rank]
+                img_path = assets_dir / folder_name / f"{file_name}.png"
+                
+                try:
+                    # Load ảnh và lấy kênh alpha trong suốt (nếu ảnh bo góc viền tròn)
+                    image = pygame.image.load(str(img_path)).convert_alpha()
+                    # Tự động Scale ảnh về đúng 100x140 pixel để khỏi vỡ layout
+                    self.card_images[card_name] = pygame.transform.smoothscale(image, (100, 140))
+                except FileNotFoundError:
+                    # Nếu thiếu ảnh thì nó sẽ để trống (bạn có thể tự xử lý thêm)
+                    print(f"Image not found: {img_path}")
+
 
     def run(self) -> None:
         running = True
@@ -540,16 +567,25 @@ class FreeCellApp:
 
         for index in range(8):
             length = len(self.session.state.cascades[index])
-            top_y = 300 if length == 0 else 300 + (length - 1) * 28
-            rect = pygame.Rect(60 + index * 140, top_y, 100, 140)
+            height = 140 if length == 0 else 140 + (length - 1) * 28
+            rect = pygame.Rect(60 + index * 140, 300, 100, height)
             targets.append(("cascade", index, rect))
         return targets
 
     def _render_card(self, rect: pygame.Rect, label: str, color: tuple[int, int, int], selected: bool = False) -> None:
-        pygame.draw.rect(self.screen, CARD_BG, rect, border_radius=10)
-        pygame.draw.rect(self.screen, (247, 228, 140) if selected else CARD_BORDER, rect, width=3, border_radius=10)
-        text = self.body_font.render(label, True, color)
-        self.screen.blit(text, text.get_rect(center=rect.center))
+        # Nếu đã load thành công file ảnh của lá bài này
+        if label in self.card_images:
+            # 1. Dán tấm ảnh vào đúng tọa độ
+            self.screen.blit(self.card_images[label], rect.topleft)
+            # 2. Nếu đang được click/kéo, vẽ thêm một viền vàng mỏng bên ngoài để nhận diện
+            if selected:
+                pygame.draw.rect(self.screen, (247, 228, 140), rect, width=4, border_radius=10)
+        else:
+            # FALLBACK: Nếu lỡ quên tải 1 vài ảnh, game vẫn vẽ kiểu cũ để ko bị crash
+            pygame.draw.rect(self.screen, CARD_BG, rect, border_radius=10)
+            pygame.draw.rect(self.screen, (247, 228, 140) if selected else CARD_BORDER, rect, width=3, border_radius=10)
+            text = self.body_font.render(label, True, color)
+            self.screen.blit(text, text.get_rect(center=rect.center))
 
     def _render_game(self) -> None:
         self.screen.fill(BG_COLOR)
