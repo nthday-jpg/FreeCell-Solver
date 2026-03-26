@@ -17,6 +17,7 @@ class GameSession:
         self._history: list[GameState] = [initial_state]
         self._cursor = 0
         self._started_at = perf_counter()
+        self._victory_time: float | None = None
 
     @classmethod
     def from_seed(cls, seed: int | None) -> "GameSession":
@@ -28,6 +29,8 @@ class GameSession:
 
     @property
     def elapsed_seconds(self) -> float:
+        if self._victory_time is not None:
+            return self._victory_time - self._started_at
         return perf_counter() - self._started_at
 
     @property
@@ -43,6 +46,7 @@ class GameSession:
         self._history = [self.state]
         self._cursor = 0
         self._started_at = perf_counter()
+        self._victory_time = None
 
     def apply_move(self, move: Move) -> tuple[bool, str]:
         try:
@@ -56,6 +60,10 @@ class GameSession:
         self._history.append(next_state)
         self._cursor += 1
         self.state = next_state
+        
+        if self.state.is_victory and self._victory_time is None:
+            self._victory_time = perf_counter()
+            
         return True, ""
 
     def undo(self) -> bool:
@@ -63,6 +71,8 @@ class GameSession:
             return False
         self._cursor -= 1
         self.state = self._history[self._cursor]
+        if not self.state.is_victory:
+            self._victory_time = None
         return True
 
     def redo(self) -> bool:

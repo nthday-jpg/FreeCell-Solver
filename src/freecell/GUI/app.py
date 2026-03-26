@@ -402,6 +402,18 @@ class FreeCellApp:
                 self._set_message("Redo successful.")
 
         for event in events:
+            # TEST WIN STATE
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_w:
+                from freecell.core import Card
+                from freecell.core.state import GameState
+                foundations = (13, 13, 13, 12)
+                freecells = (Card(rank=13, suit='S'), None, None, None)
+                cascades = ((), (), (), (), (), (), (), ())
+                self.session.state = GameState(cascades=cascades, freecells=freecells, foundations=foundations)
+                self.session._history.append(self.session.state)
+                self.session._cursor = len(self.session._history) - 1
+                self._set_message("TEST MODE: Move K S to Foundation to Win!")
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self._handle_mouse_down(event.pos)
             elif event.type == pygame.MOUSEMOTION:
@@ -428,6 +440,9 @@ class FreeCellApp:
         return True
     
     def _handle_mouse_down(self, mouse_pos: tuple[int, int]) -> None:
+        if self.session.state.is_victory:
+            return
+            
         targets = self._board_targets()
         target = next((item for item in targets if item[2].collidepoint(mouse_pos)), None)
 
@@ -675,6 +690,28 @@ class FreeCellApp:
         if self.message:
             msg = self.body_font.render(self.message, True, self.message_color)
             self.screen.blit(msg, (40, 705))
+            
+        # Lớp Victory
+        if self.session.state.is_victory:
+            overlay = pygame.Surface((WINDOW_SIZE[0], WINDOW_SIZE[1] - 70), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 160))
+            self.screen.blit(overlay, (0, 70))
+            
+            center_x = self.screen.get_rect().centerx
+            center_y = self.screen.get_rect().centery + 35
+            popup_rect = pygame.Rect(0, 0, 480, 220)
+            popup_rect.center = (center_x, center_y)
+            pygame.draw.rect(self.screen, BUTTON_BG, popup_rect, border_radius=15)
+            pygame.draw.rect(self.screen, SUCCESS_COLOR, popup_rect, width=5, border_radius=15)
+            
+            title = self.title_font.render("VICTORY!", True, SUCCESS_COLOR)
+            self.screen.blit(title, title.get_rect(center=(center_x, center_y - 45)))
+            
+            stats = self.body_font.render(f"Moves: {self.session.move_count}    Time: {self.session.elapsed_seconds:.1f}s", True, TEXT_COLOR)
+            self.screen.blit(stats, stats.get_rect(center=(center_x, center_y + 15)))
+            
+            instruction = self.small_font.render("Click 'Restart' or 'Menu' to play again", True, WARN_COLOR)
+            self.screen.blit(instruction, instruction.get_rect(center=(center_x, center_y + 60)))
 
 
 def run() -> None:
