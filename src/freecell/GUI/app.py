@@ -112,6 +112,7 @@ class FreeCellApp:
         self.seed = 1
         self.session = GameSession.from_seed(self.seed)
         self.selected_source: tuple[str, int] | None = None
+        self.drag_count = 1
         self.message = ""
         self.message_color = TEXT_COLOR
         self.solver_worker = SolverWorker()
@@ -416,18 +417,42 @@ class FreeCellApp:
 
         # Bắt đầu nhấc bài lên (Drag)
         if pile_type == "cascade" and self.session.state.cascade_top(pile_index) is not None:
-            self.selected_source = (pile_type, pile_index)
-            self.is_dragging = True
-            self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - rect.y)
-            self.drag_pos = mouse_pos
-            self._set_message(f"Selected cascade {pile_index}.")
+            cascade = self.session.state.cascades[pile_index]
+            clicked_offset = len(cascade) - 1
+            for offset in range(len(cascade) - 1, -1, -1):
+                card_y = 300 + offset * 28
+                card_rect = pygame.Rect(rect.x, card_y, 100, 140 if offset == len(cascade) - 1 else 28)
+                if card_rect.collidepoint(mouse_pos):
+                    clicked_offset = offset
+                    break
+            
+            from freecell.core.rules import is_descending_alternating
+            stack_to_drag = cascade[clicked_offset:]
+            if is_descending_alternating(stack_to_drag):
+                self.selected_source = (pile_type, pile_index)
+                self.drag_count = len(stack_to_drag)
+                self.is_dragging = True
+                self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - (300 + clicked_offset * 28))
+                self.drag_pos = mouse_pos
+                self._set_message(f"Selected cascade {pile_index} ({self.drag_count} cards).")
+            else:
+                self._set_message("Invalid stack selection.", ERROR_COLOR)
             
         elif pile_type == "freecell" and self.session.state.freecells[pile_index] is not None:
             self.selected_source = (pile_type, pile_index)
+            self.drag_count = 1
             self.is_dragging = True
             self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - rect.y)
             self.drag_pos = mouse_pos
             self._set_message(f"Selected freecell {pile_index}.")
+
+        elif pile_type == "foundation" and self.session.state.foundations[pile_index] > 0:
+            self.selected_source = (pile_type, pile_index)
+            self.drag_count = 1
+            self.is_dragging = True
+            self.drag_offset = (mouse_pos[0] - rect.x, mouse_pos[1] - rect.y)
+            self.drag_pos = mouse_pos
+            self._set_message(f"Selected foundation {pile_index}.")
 
     def _handle_mouse_motion(self, mouse_pos: tuple[int, int]) -> None:
         if self.is_dragging:
@@ -462,7 +487,7 @@ class FreeCellApp:
         move = Move(
             source=source_type, source_index=source_index,
             destination=dest_type, destination_index=destination_index,
-            count=1,
+            count=self.drag_count,
         )
 
         legal_moves = get_legal_moves(self.session.state.to_packed())
@@ -501,78 +526,22 @@ class FreeCellApp:
         ]
         return self._buttons(defs, events)
 
-    def _handle_board_click(self, click_pos: tuple[int, int]) -> None:
-        targets = self._board_targets()
-        target = next((item for item in targets if item[2].collidepoint(click_pos)), None)
-        if target is None:
-            self.selected_source = None
-            return
 
-        pile_type, pile_index, _ = target
-        if self.selected_source is None:
-            if pile_type == "cascade" and self.session.state.cascade_top(pile_index) is not None:
-                self.selected_source = (pile_type, pile_index)
-                self._set_message(f"Selected cascade {pile_index}.")
-            elif pile_type == "freecell" and self.session.state.freecells[pile_index] is not None:
-                self.selected_source = (pile_type, pile_index)
-                self._set_message(f"Selected freecell {pile_index}.")
-            return
-
-        source_type, source_index = self.selected_source
-        destination_index = 0 if pile_type == "foundation" else pile_index
-        move = Move(
-            source=source_type,
-            source_index=source_index,
-            destination=pile_type,
-            destination_index=destination_index,
-            count=1,
-        )
-
-        legal_moves = get_legal_moves(self.session.state.to_packed())
-        is_legal = any(
-            candidate.source == move.source
-            and candidate.source_index == move.source_index
-            and candidate.destination == move.destination
-            and candidate.destination_index == move.destination_index
-            and candidate.count == move.count
-            for candidate in legal_moves
-        )
-        if not is_legal:
-            self._set_message("Illegal move.", ERROR_COLOR)
-            self.audio.play_sfx("move_fail")
-            self.selected_source = None
-            return
-
-        success, error = self.session.apply_move(move)
-        if success:
-            self._set_message("Move applied.", SUCCESS_COLOR)
-            self.audio.play_sfx("move_ok")
-            self.selected_source = None
-            if self.session.state.is_victory:
-                self.audio.play_music("win")
-                self._set_message("Congratulations! You won!", SUCCESS_COLOR)
-        else:
-            self._set_message(f"Move failed: {error}", ERROR_COLOR)
-            self.audio.play_sfx("move_fail")
-            self.selected_source = None
 
     def _board_targets(self) -> list[tuple[str, int, pygame.Rect]]:
         targets: list[tuple[str, int, pygame.Rect]] = []
-        freecell_start_x = 70
         for index in range(4):
-            rect = pygame.Rect(freecell_start_x + index * 140, 120, 100, 140)
+            rect = pygame.Rect(60 + index * 140, 120, 100, 140)
             targets.append(("freecell", index, rect))
 
-        foundation_start_x = 670
         for index in range(4):
-            rect = pygame.Rect(foundation_start_x + index * 120, 120, 100, 140)
+            rect = pygame.Rect(60 + (index + 4) * 140, 120, 100, 140)
             targets.append(("foundation", index, rect))
 
-        cascade_start_x = 40
         for index in range(8):
             length = len(self.session.state.cascades[index])
             top_y = 300 if length == 0 else 300 + (length - 1) * 28
-            rect = pygame.Rect(cascade_start_x + index * 145, top_y, 100, 140)
+            rect = pygame.Rect(60 + index * 140, top_y, 100, 140)
             targets.append(("cascade", index, rect))
         return targets
 
@@ -592,11 +561,11 @@ class FreeCellApp:
         )
         self.screen.blit(header, (40, 70))
 
-        dragged_card = None # Chuẩn bị lưu lá bài đang kéo
+        dragged_cards = []
 
         # Freecells
         for index, card in enumerate(self.session.state.freecells):
-            rect = pygame.Rect(40 + index * 140, 120, 100, 140)
+            rect = pygame.Rect(60 + index * 140, 120, 100, 140)
             is_selected = self.selected_source == ("freecell", index)
             if card is None:
                 pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
@@ -605,7 +574,7 @@ class FreeCellApp:
                 self.screen.blit(label, (rect.x + 34, rect.y + 56))
             else:
                 if self.is_dragging and is_selected:
-                    dragged_card = card
+                    dragged_cards.append(card)
                     # Vẽ một ô trống mờ mờ thay thế vị trí gốc của lá bài
                     pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
                     pygame.draw.rect(self.screen, (190, 230, 204), rect, 2, border_radius=10)
@@ -615,21 +584,28 @@ class FreeCellApp:
 
         # Foundations
         for index, suit in enumerate(SUITS):
-            rect = pygame.Rect(620 + index * 120, 120, 100, 140)
+            rect = pygame.Rect(60 + (index + 4) * 140, 120, 100, 140)
             rank = self.session.state.foundations[index]
-            if rank == 0:
+            is_selected = self.selected_source == ("foundation", index)
+            
+            draw_rank = rank - 1 if (self.is_dragging and is_selected) else rank
+
+            if draw_rank == 0:
                 pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
                 pygame.draw.rect(self.screen, (190, 230, 204), rect, 2, border_radius=10)
                 label = self.small_font.render(f"{suit} 0", True, TEXT_COLOR)
                 self.screen.blit(label, (rect.x + 28, rect.y + 56))
             else:
-                card = Card(rank=rank, suit=suit)
+                card = Card(rank=draw_rank, suit=suit)
                 card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
                 self._render_card(rect, card.short_name, card_color)
 
+            if self.is_dragging and is_selected:
+                dragged_cards.append(Card(rank=rank, suit=suit))
+
         # Cascades
         for index, cascade in enumerate(self.session.state.cascades):
-            x = 40 + index * 145
+            x = 60 + index * 140
             if not cascade:
                 rect = pygame.Rect(x, 300, 100, 140)
                 pygame.draw.rect(self.screen, (25, 84, 56), rect, border_radius=10)
@@ -641,22 +617,23 @@ class FreeCellApp:
             for offset, card in enumerate(cascade):
                 y = 300 + offset * 28
                 rect = pygame.Rect(x, y, 100, 140)
-                selected = self.selected_source == ("cascade", index) and offset == len(cascade) - 1
+                selected = self.selected_source == ("cascade", index) and offset >= len(cascade) - self.drag_count
                 
                 if self.is_dragging and selected:
-                    dragged_card = card
+                    dragged_cards.append(card)
                     continue # Bỏ qua không vẽ lá này ở vị trí cũ nữa
 
                 card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
                 self._render_card(rect, card.short_name, card_color, selected=selected)
 
         # Lớp Mới: Vẽ lá bài đang được kéo thả trên cùng
-        if self.is_dragging and dragged_card is not None:
+        if self.is_dragging and dragged_cards:
             drag_x = self.drag_pos[0] - self.drag_offset[0]
             drag_y = self.drag_pos[1] - self.drag_offset[1]
-            drag_rect = pygame.Rect(drag_x, drag_y, 100, 140)
-            card_color = (196, 38, 38) if dragged_card.color == "red" else (20, 20, 20)
-            self._render_card(drag_rect, dragged_card.short_name, card_color, selected=True)
+            for offset, card in enumerate(dragged_cards):
+                drag_rect = pygame.Rect(drag_x, drag_y + offset * 28, 100, 140)
+                card_color = (196, 38, 38) if card.color == "red" else (20, 20, 20)
+                self._render_card(drag_rect, card.short_name, card_color, selected=True)
 
         # Messages
         if self.message:
