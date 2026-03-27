@@ -7,7 +7,6 @@ from typing import Iterable
 
 import pygame
 
-from freecell.GUI.move_adapter import get_legal_moves
 from freecell.GUI.session import GameSession
 from freecell.GUI.settings import GuiSettings, load_settings, save_settings
 from freecell.GUI.solver_worker import SolverWorker
@@ -532,32 +531,19 @@ class FreeCellApp:
             count=self.drag_count,
         )
 
-        legal_moves = get_legal_moves(self.session.state.to_packed())
-        is_legal = any(
-            candidate.source == move.source and candidate.source_index == move.source_index
-            and candidate.destination == move.destination and candidate.destination_index == move.destination_index
-            and candidate.count == move.count
-            for candidate in legal_moves
-        )
-        
-        if not is_legal:
-            self._set_message("Illegal move.", ERROR_COLOR)
+        success, error = self.session.apply_move(move)
+        if not success:
+            self._set_message(f"Illegal move: {error}", ERROR_COLOR)
             self.audio.play_sfx("move_fail")
             self.selected_source = None
             return
 
-        success, error = self.session.apply_move(move)
-        if success:
-            self._set_message("Move applied.", SUCCESS_COLOR)
-            self.audio.play_sfx("move_ok")
-            self.selected_source = None
-            if self.session.state.is_victory:
-                self.audio.play_music("win")
-                self._set_message("Congratulations! You won!", SUCCESS_COLOR)
-        else:
-            self._set_message(f"Move failed: {error}", ERROR_COLOR)
-            self.audio.play_sfx("move_fail")
-            self.selected_source = None
+        self._set_message("Move applied.", SUCCESS_COLOR)
+        self.audio.play_sfx("move_ok")
+        self.selected_source = None
+        if self.session.state.is_victory:
+            self.audio.play_music("win")
+            self._set_message("Congratulations! You won!", SUCCESS_COLOR)
 
     def _game_buttons(self, events: list[pygame.event.Event]) -> str | None:
         defs = [

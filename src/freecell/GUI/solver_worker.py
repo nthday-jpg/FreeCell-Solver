@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from multiprocessing import Process, Queue
 from queue import Empty
@@ -8,20 +9,6 @@ from time import perf_counter
 from freecell.core import Move, PackedState
 from freecell.solvers.BFS import BFSSolver
 from freecell.solvers.UCS import UCSSolver
-
-
-def _move_to_tuple(move: Move) -> tuple[str, int, str, int, int]:
-    return (move.source, move.source_index, move.destination, move.destination_index, move.count)
-
-
-def _tuple_to_move(raw: tuple[str, int, str, int, int]) -> Move:
-    return Move(
-        source=raw[0],
-        source_index=raw[1],
-        destination=raw[2],
-        destination_index=raw[3],
-        count=raw[4],
-    )
 
 
 def _solve_target(
@@ -45,7 +32,7 @@ def _solve_target(
             "reason": reason,
             "elapsed_seconds": perf_counter() - started,
             "expanded_nodes": result.expanded_nodes,
-            "moves": [_move_to_tuple(move) for move in result.moves],
+            "moves": [dataclasses.astuple(move) for move in result.moves],
         }
     )
 
@@ -108,5 +95,5 @@ class SolverWorker:
             reason=str(payload.get("reason", "")),
             elapsed_seconds=float(payload.get("elapsed_seconds", 0.0)),
             expanded_nodes=int(payload.get("expanded_nodes", 0)),
-            moves=tuple(_tuple_to_move(entry) for entry in payload.get("moves", [])),
+            moves=tuple(Move(*entry) for entry in payload.get("moves", [])),
         )

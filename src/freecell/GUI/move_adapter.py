@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from freecell.core import Move, PackedState
-from freecell.core.move_engine import CASCADE, FREECELL, FOUNDATION
-from freecell.core.constants import EMPTY_CARD_CODE
+from freecell.core.constants import CASCADE, FREECELL, FOUNDATION, EMPTY_CARD_CODE
 from freecell.core.rules import can_stack_on_cascade_code
+from freecell.core.card import card_to_code, Card, INDEX_TO_SUIT
 from freecell.solvers.base import BaseSolver
 
 
@@ -42,7 +42,8 @@ def get_legal_moves(state: PackedState) -> tuple[Move, ...]:
     for suit_index in range(4):
         rank = state.foundation_rank(suit_index)
         if rank > 0:
-            card_code = ((rank - 1) << 2) | suit_index
+            card = Card(rank=rank, suit=INDEX_TO_SUIT[suit_index])
+            card_code = card_to_code(card)
             for dest_index in range(state.cascade_count):
                 if can_stack_on_cascade_code(card_code, state.cascade_top(dest_index)):
                     raw_moves.append((FOUNDATION, suit_index, CASCADE, dest_index, 1))
