@@ -54,8 +54,9 @@ class BestFSSolver(BaseSolver):
 
         while frontier:
             # Pop the "best choice" (lowest f-score)
-            _, _, state = heapq.heappop(frontier)
-
+            f_val, _, state = heapq.heappop(frontier)
+            if state in g_score and f_val > self.evaluate(g_score[state], None, state)[0]: 
+                    continue
             if self.is_goal(state):
                 return self.build_result(
                     solved=True,
