@@ -78,6 +78,39 @@ class BaseSolver(ABC):
 		yield from self._cascade_to_cascade_moves(state)
 		yield from self._cascade_to_freecell_moves(state)
 
+
+	def _reconstruct_moves(self,
+        goal_state: PackedState,
+        parents: dict[PackedState, PackedState | None],
+        parent_moves: dict[PackedState, RawMove],
+    ) -> tuple[Move, ...]:
+		moves_reversed: list[Move] = []
+		current = goal_state
+
+		while True:
+			move = parent_moves.get(current)
+			if move is None:
+				break
+			source, source_index, destination, destination_index, count = move
+			source_name = "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
+			destination_name = "cascade" if destination == CASCADE else "freecell" if destination == FREECELL else "foundation"
+			moves_reversed.append(
+				Move(
+					source=source_name,
+					source_index=source_index,
+					destination=destination_name,
+					destination_index=destination_index,
+					count=count,
+				)
+			)
+			parent = parents[current]
+			if parent is None:
+				break
+			current = parent
+
+		moves_reversed.reverse()
+		return tuple(moves_reversed)
+
 	def _cascade_to_foundation_moves(self, state: PackedState) -> Iterator[RawMove]:
 		for source_index in range(state.cascade_count):
 			top_code = state.cascade_top(source_index)
