@@ -11,14 +11,7 @@ StateKey = tuple[int, ...]
 
 
 class IDSSolver(BaseSolver):
-    """
-    Iterative Deepening Search: repeated depth-limited DFS with increasing depth.
 
-    Repeated states:
-    - ``path_keys``: states on the current DFS path (``state.key()``), to avoid cycles.
-    - ``best_depth``: within one depth-limited run, maps state key -> shallowest depth
-      reached so far; revisits at the same or greater depth are pruned.
-    """
 
     def __init__(self, max_depth: int | None = 200, max_expansions: int | None = None):
         self.max_depth = max_depth
