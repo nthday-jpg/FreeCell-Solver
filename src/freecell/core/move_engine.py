@@ -204,6 +204,81 @@ def move_packed_freecell_to_foundation(
 	)
 
 
+def move_packed_foundation_to_cascade(
+	state: "PackedState",
+	suit_index: int,
+	cascade_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
+	rank = state.foundation_rank(suit_index)
+	if validate and rank == 0:
+		raise ValueError("Source foundation is empty")
+
+	moving = ((rank - 1) << 2) | suit_index
+
+	dest_len = state.cascade_length(cascade_index)
+	destination_top = state.cascade_top(cascade_index)
+	if validate and not can_stack_on_cascade_code(moving, destination_top):
+		raise ValueError("Illegal placement on cascade")
+
+	dest_new_len = dest_len + 1
+	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
+
+	new_words = list(state.cascade_words)
+	new_words[cascade_index] = dest_new_word
+
+	new_lengths = (
+		state.cascade_lengths
+		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
+		| (dest_new_len << (cascade_index * CASCADE_LEN_BITS))
+	)
+
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
+	new_foundations |= ((rank - 1) << (suit_index * FOUNDATION_BITS))
+
+	return _new_state(
+		state,
+		cascade_words=tuple(new_words),
+		cascade_lengths=new_lengths,
+		freecells=state.freecells,
+		foundations=new_foundations,
+	)
+
+
+def move_packed_foundation_to_freecell(
+	state: "PackedState",
+	suit_index: int,
+	freecell_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
+	rank = state.foundation_rank(suit_index)
+	if validate and rank == 0:
+		raise ValueError("Source foundation is empty")
+	if validate and state.freecell(freecell_index) != EMPTY_CARD_CODE:
+		raise ValueError("Destination freecell is occupied")
+
+	moving = ((rank - 1) << 2) | suit_index
+
+	new_freecells = (
+		state.freecells
+		& ~_SLOT_MASKS_CARD[freecell_index]
+		| (moving << (freecell_index * CARD_BITS))
+	)
+
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
+	new_foundations |= ((rank - 1) << (suit_index * FOUNDATION_BITS))
+
+	return _new_state(
+		state,
+		cascade_words=state.cascade_words,
+		cascade_lengths=state.cascade_lengths,
+		freecells=new_freecells,
+		foundations=new_foundations,
+	)
+
+
 def move_packed_cascade_to_cascade(
 		state: "PackedState", 
 		source_index: int, 
@@ -310,6 +385,24 @@ def apply_packed_raw_move(state: "PackedState", move: "RawMove", *, validate: bo
 		return move_packed_freecell_to_foundation(
 			state,
 			source_index,
+			validate=validate,
+		)
+	if source == FOUNDATION and destination == CASCADE:
+		if validate and count != 1:
+			raise ValueError("Only one card can be moved from foundation")
+		return move_packed_foundation_to_cascade(
+			state,
+			source_index,
+			destination_index,
+			validate=validate,
+		)
+	if source == FOUNDATION and destination == FREECELL:
+		if validate and count != 1:
+			raise ValueError("Only one card can be moved from foundation")
+		return move_packed_foundation_to_freecell(
+			state,
+			source_index,
+			destination_index,
 			validate=validate,
 		)
 	raise ValueError(f"Unsupported move: {move}")
