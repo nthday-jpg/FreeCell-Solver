@@ -302,7 +302,8 @@ def benchmark(seed: int = 1, target_expansions: int = 1500, trials: int = 5) -> 
     unpacked_bytes_per_unique = (mean(unpacked_peak_memories) / unpacked_unique) if unpacked_unique > 0 else 0.0
     memory_ratio = (unpacked_peak_mean_mb / packed_peak_mean_mb) if packed_peak_mean_mb > 0 else 0.0
 
-    print("=== BFS Expansion Speed: Packed vs Unpacked ===")
+    print("=== BFS Expansion Speed (Canonical Mode) ===")
+    print("packed_dedup=canonical_key() unpacked_dedup=canonical_tuple_key")
     print(f"seed={seed} target_expansions={target_expansions} trials={trials}")
     print(f"packed_unique_last_trial={packed_unique}")
     print(f"unpacked_unique_last_trial={unpacked_unique}")

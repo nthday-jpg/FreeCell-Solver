@@ -151,7 +151,7 @@ class PackedState:
     def key(self) -> tuple[int, ...]:
         return (*self.cascade_words, self.cascade_lengths, self.freecells, self.foundations)
 
-    def canonical_key(self) -> tuple[int, tuple[int, ...], tuple[tuple[int, ...], ...]]:
+    def canonical_key(self) -> tuple[int, tuple[int, ...], tuple[tuple[int, int], ...]]:
         # Foundations are suit-specific, so keep their native packed order.
         foundations = self.foundations
 
@@ -161,14 +161,19 @@ class PackedState:
             sorted((freecell_bits >> (index * CARD_BITS)) & CARD_MASK for index in range(FREECELL_COUNT))
         )
 
-        # Cascade columns are interchangeable; compare by card-code tuples.
+        # Cascade columns are interchangeable; compare by compact (length, packed_word)
+        # signatures instead of decoding every card into Python tuples.
         cascade_lengths = self.cascade_lengths
         cascade_words = self.cascade_words
-        cascades: list[tuple[int, ...]] = []
+        cascades: list[tuple[int, int]] = []
         for index in range(CASCADE_COUNT):
             length = (cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF
             word = cascade_words[index]
-            cascades.append(tuple((word >> (position * CARD_BITS)) & CARD_MASK for position in range(length)))
+            # Normalize to active bits only so canonicalization does not depend on
+            # any inactive high bits beyond the current cascade length.
+            active_bits = length * CARD_BITS
+            normalized_word = word & ((1 << active_bits) - 1) if active_bits else 0
+            cascades.append((length, normalized_word))
 
         return (foundations, freecells, tuple(sorted(cascades)))
 
