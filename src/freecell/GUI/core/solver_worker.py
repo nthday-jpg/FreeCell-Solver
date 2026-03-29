@@ -7,6 +7,7 @@ from queue import Empty
 from time import perf_counter
 
 from freecell.core import Move, PackedState
+from freecell.solvers.Astar import AstarSolver
 from freecell.solvers.BFS import BFSSolver
 from freecell.solvers.UCS import UCSSolver
 
@@ -18,8 +19,11 @@ def _solve_target(
     queue: Queue,
 ) -> None:
     started = perf_counter()
-    if solver_name.upper() == "BFS":
+    name = solver_name.upper()
+    if name == "BFS":
         solver = BFSSolver()
+    elif name in ("ASTAR", "A*"):
+        solver = AstarSolver(max_expansions=max_expansions)
     else:
         solver = UCSSolver(max_expansions=max_expansions)
 

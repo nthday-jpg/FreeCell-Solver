@@ -20,6 +20,12 @@ class GameScene(BaseScene):
         self.solver_worker = SolverWorker()
         self.solver_solution: tuple[Move, ...] = ()
         self.solver_solution_index = 0
+        self.show_solver_popup = False
+        self.solver_choices = ["BFS", "DFS", "UCS", "A*"]
+        try:
+            self.solver_choice_index = self.solver_choices.index(self.settings.preferred_solver)
+        except Exception:
+            self.solver_choice_index = 0
 
         self.is_dragging = False
         self.drag_offset = (0, 0)
@@ -60,7 +66,19 @@ class GameScene(BaseScene):
     def handle_events(self, events: list[pygame.event.Event]) -> None:
         self._poll_solver()
         button = self._game_buttons(events)
+        if button == "Solver":
+            # show solver popup to choose solver and start/quit
+            self.show_solver_popup = True
+            return
+
+        # If popup is shown, let it consume events first
+        if self.show_solver_popup:
+            self._handle_solver_popup_events(events)
+            return
+        if button == "Next Step":
+            self._apply_solver_step()
         if button == "Menu":
+            # TODO: save current session state for potential resume
             self.solver_worker.stop()
             self.change_scene("menu")
             self.audio.play_music("menu")
@@ -225,8 +243,69 @@ class GameScene(BaseScene):
             ("Restart", pygame.Rect(175, 18, 120, 40)),
             ("Undo", pygame.Rect(310, 18, 120, 40)),
             ("Redo", pygame.Rect(445, 18, 120, 40)),
+            ("Solver", pygame.Rect(580, 18, 120, 40)), # choose BFS, DFS, A*, UCS
+            ("Next Step", pygame.Rect(715, 18, 120, 40)), # step through solver solution
         ]
         return draw_buttons(self.screen, self.assets.body_font, defs, events)
+
+    def _handle_solver_popup_events(self, events: list[pygame.event.Event]) -> None:
+        center_x = self.screen.get_rect().centerx
+        center_y = self.screen.get_rect().centery + 35
+        popup_rect = pygame.Rect(0, 0, 360, 180)
+        popup_rect.center = (center_x, center_y)
+
+        dropdown_rect = pygame.Rect(popup_rect.x + 40, popup_rect.y + 50, popup_rect.width - 80, 40)
+        solve_rect = pygame.Rect(popup_rect.x + 60, popup_rect.y + 110, 100, 36)
+        quit_rect = pygame.Rect(popup_rect.x + 200, popup_rect.y + 110, 100, 36)
+
+        # handle dropdown click (cycle options)
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if dropdown_rect.collidepoint(event.pos):
+                    self.solver_choice_index = (self.solver_choice_index + 1) % len(self.solver_choices)
+                    return
+
+        # handle popup buttons
+        defs = [("Solve", solve_rect), ("Quit", quit_rect)]
+        clicked = draw_buttons(self.screen, self.assets.body_font, defs, events)
+        if clicked == "Solve":
+            solver_name = self.solver_choices[self.solver_choice_index]
+            self.settings.preferred_solver = solver_name
+            self.solver_worker.start(self.session.state.to_packed(), solver_name, SOLVER_MAX_EXPANSIONS)
+            self.show_solver_popup = False
+            self._set_message(f"Started solver: {solver_name}.")
+        elif clicked == "Quit":
+            self.solver_worker.stop()
+            self.show_solver_popup = False
+            self._set_message("Solver stopped.")
+
+    def _render_solver_popup(self) -> None:
+        center_x = self.screen.get_rect().centerx
+        center_y = self.screen.get_rect().centery + 35
+        overlay = pygame.Surface((WINDOW_SIZE[0], WINDOW_SIZE[1] - 70), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, 70))
+
+        popup_rect = pygame.Rect(0, 0, 360, 180)
+        popup_rect.center = (center_x, center_y)
+        pygame.draw.rect(self.screen, BUTTON_BG, popup_rect, border_radius=12)
+        pygame.draw.rect(self.screen, TEXT_COLOR, popup_rect, width=2, border_radius=12)
+
+        title = self.assets.title_font.render("Solver", True, TEXT_COLOR)
+        self.screen.blit(title, title.get_rect(center=(center_x, popup_rect.y + 24)))
+
+        dropdown_rect = pygame.Rect(popup_rect.x + 40, popup_rect.y + 50, popup_rect.width - 80, 40)
+        pygame.draw.rect(self.screen, (40, 40, 40), dropdown_rect, border_radius=6)
+        pygame.draw.rect(self.screen, (160, 160, 160), dropdown_rect, width=2, border_radius=6)
+        current = self.solver_choices[self.solver_choice_index]
+        label = self.assets.body_font.render(f"{current}  (click to change)", True, TEXT_COLOR)
+        self.screen.blit(label, (dropdown_rect.x + 8, dropdown_rect.y + 8))
+
+        # Draw buttons
+        solve_rect = pygame.Rect(popup_rect.x + 60, popup_rect.y + 110, 100, 36)
+        quit_rect = pygame.Rect(popup_rect.x + 200, popup_rect.y + 110, 100, 36)
+        defs = [("Solve", solve_rect), ("Quit", quit_rect)]
+        draw_buttons(self.screen, self.assets.body_font, defs, [])
 
     def _board_targets(self) -> list[tuple[str, int, pygame.Rect]]:
         targets: list[tuple[str, int, pygame.Rect]] = []
@@ -332,6 +411,10 @@ class GameScene(BaseScene):
         if self.message:
             msg = self.assets.body_font.render(self.message, True, self.message_color)
             self.screen.blit(msg, (40, 705))
+        
+        # Solver popup
+        if self.show_solver_popup:
+            self._render_solver_popup()
             
         # Victory Overlay
         if self.session.state.is_victory:
