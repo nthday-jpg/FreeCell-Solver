@@ -29,12 +29,12 @@ from .constants import (
     MAX_FOUNDATION_RANK,
     FOUNDATION_COMPLETE_MASK,
     EMPTY_CARD_CODE,
-    RawMove
 ) 
+from .move_types import RawMove
 
 if TYPE_CHECKING:
     from .state import GameState
-    from .state import Move
+    from .move_types import Move
 
 
 FOUNDATION_BITS = 4

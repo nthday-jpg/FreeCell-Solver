@@ -1,20 +1,9 @@
 from dataclasses import dataclass
-from typing import Literal
 
 from .card import Card, SUIT_TO_INDEX, SUITS
 from .deal_generator import deal_cascades
+from .move_types import Move
 from .packed_state import PackedState
-
-PileType = Literal["cascade", "freecell", "foundation"]
-
-
-@dataclass(frozen=True, slots=True)
-class Move:
-    source: PileType
-    source_index: int
-    destination: PileType
-    destination_index: int
-    count: int = 1
 
 
 @dataclass(frozen=True, slots=True)

@@ -28,6 +28,5 @@ MS_RAND_MULTIPLIER = 214013
 MS_RAND_INCREMENT = 2531011
 MS_RAND_MASK = 0x7FFFFFFF
 
-# Move representation: (source_type, source_index, destination_type, destination_index, count)
-# source_type/destination_type: CASCADE (0), FREECELL (1), or FOUNDATION (2)
-RawMove = tuple[int, int, int, int, int]
+# Backward-compatible re-export; canonical definition lives in move_types.py.
+from .move_types import RawMove

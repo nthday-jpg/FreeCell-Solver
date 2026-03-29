@@ -20,7 +20,8 @@ from .rules import (
 	is_descending_alternating_codes,
 	max_movable_cards,
 )
-from .state import GameState, Move, PileType
+from .move_types import Move, PileType, RawMove
+from .state import GameState
 
 __all__ = [
     "Card",
@@ -39,6 +40,7 @@ __all__ = [
     "max_movable_cards",
     "GameState",
     "Move",
+    "RawMove",
     "PackedState",
     "PileType",
     "card_to_code",
