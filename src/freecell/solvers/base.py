@@ -6,15 +6,14 @@ from time import perf_counter
 import tracemalloc
 from typing import Iterator
 
-from ..core.constants import EMPTY_CARD_CODE
-from ..core.card import card_code_suit_index
+from ..core.constants import CARD_BITS, CARD_MASK, EMPTY_CARD_CODE
+from ..core.card import CARD_CODE_IS_RED, CARD_CODE_RANK, card_code_suit_index
 from ..core import Move, RawMove
 from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from ..core.packed_state import PackedState
 from ..core.rules import (
 	can_move_to_foundation_code,
 	can_stack_on_cascade_code,
-	is_descending_alternating_codes,
 	max_movable_cards,
 )
 
@@ -126,10 +125,12 @@ class BaseSolver(ABC):
 		empty_cascades_total = state.cascade_count_empty()
 		empty_freecells_total = state.freecell_count_empty()
 		cascade_lengths = [state.cascade_length(i) for i in range(state.cascade_count)]
+		cascade_words = state.cascade_words
 
 		for source_index, source_len in enumerate(cascade_lengths):
 			if source_len == 0:
 				continue
+			source_word = cascade_words[source_index]
 			for destination_index, destination_len in enumerate(cascade_lengths):
 				if source_index == destination_index:
 					continue
@@ -141,13 +142,24 @@ class BaseSolver(ABC):
 					source_len,
 					max_movable_cards(empty_freecells_total, auxiliary_empty_cascades),
 				)
+				if max_count <= 0:
+					continue
 
+				head_code: int | None = None
 				for count in range(1, max_count + 1):
-					moving_stack = state.cascade_tail_codes(source_index, count)
-					if not is_descending_alternating_codes(moving_stack):
-						continue
-					moving_code = moving_stack[0]
+					# Pull the moving head card directly from packed bits.
+					position = source_len - count
+					moving_code = (source_word >> (position * CARD_BITS)) & CARD_MASK
 
+					# As the moving stack grows by one card, only the new head-to-previous-head
+					# relation needs checking; if it fails once, larger stacks will also fail.
+					if head_code is not None:
+						if CARD_CODE_RANK[moving_code] != CARD_CODE_RANK[head_code] + 1:
+							break
+						if CARD_CODE_IS_RED[moving_code] == CARD_CODE_IS_RED[head_code]:
+							break
+
+					head_code = moving_code
 					if can_stack_on_cascade_code(moving_code, destination_top_code):
 						yield (CASCADE, source_index, CASCADE, destination_index, count)
 

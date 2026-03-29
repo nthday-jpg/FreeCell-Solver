@@ -156,13 +156,18 @@ class PackedState:
         foundations = self.foundations
 
         # Freecells are interchangeable for search purposes.
-        freecells = tuple(sorted(self.freecell(index) for index in range(FREECELL_COUNT)))
+        freecell_bits = self.freecells
+        freecells = tuple(
+            sorted((freecell_bits >> (index * CARD_BITS)) & CARD_MASK for index in range(FREECELL_COUNT))
+        )
 
         # Cascade columns are interchangeable; compare by card-code tuples.
+        cascade_lengths = self.cascade_lengths
+        cascade_words = self.cascade_words
         cascades: list[tuple[int, ...]] = []
         for index in range(CASCADE_COUNT):
-            length = self.cascade_length(index)
-            word = self.cascade_words[index]
+            length = (cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF
+            word = cascade_words[index]
             cascades.append(tuple((word >> (position * CARD_BITS)) & CARD_MASK for position in range(length)))
 
         return (foundations, freecells, tuple(sorted(cascades)))
