@@ -2,7 +2,6 @@ from abc import abstractmethod
 import heapq
 from time import perf_counter
 from itertools import count
-from typing import Callable
 
 from .base import BaseSolver, SolveResult, RawMove
 from ..core import PackedState
@@ -36,17 +35,17 @@ class BestFSSolver(BaseSolver):
                 elapsed_seconds=perf_counter() - started
             )
 
-        # Priority Queue: (f_score, entry_count, state)
+        # Priority Queue: (f_score, g_score, entry_count, state)
         # entry_count acts as a tie-breaker for states with equal f_scores
         tie = count()
         frontier = []
         
         # Initial g is 0. Initial f depends on the heuristic.
         initial_f, _ = self.evaluate(0, None, initial_state)
-        heapq.heappush(frontier, (initial_f, next(tie), initial_state))
+        heapq.heappush(frontier, (initial_f, 0, next(tie), initial_state))
         
-        # Track the best (shortest) distance to each state
-        g_score: dict[PackedState, int] = {initial_state: 0}
+        # Track the best (shortest) distance by canonical state key.
+        g_score: dict[tuple, int] = {initial_state.canonical_key(): 0}
         parents: dict[PackedState, PackedState | None] = {initial_state: None}
         parent_moves: dict[PackedState, RawMove] = {}
 
@@ -54,9 +53,12 @@ class BestFSSolver(BaseSolver):
 
         while frontier:
             # Pop the "best choice" (lowest f-score)
-            f_val, _, state = heapq.heappop(frontier)
-            if state in g_score and f_val > self.evaluate(g_score[state], None, state)[0]: 
-                    continue
+            _, current_g, _, state = heapq.heappop(frontier)
+            state_key = state.canonical_key()
+            best_g = g_score.get(state_key)
+            if best_g is None or current_g != best_g:
+                continue
+
             if self.is_goal(state):
                 return self.build_result(
                     solved=True,
@@ -73,7 +75,6 @@ class BestFSSolver(BaseSolver):
                     expanded_nodes=expanded_nodes,
                     elapsed_seconds=perf_counter() - started
                 )
-            current_g = g_score[state]
             prev_move = parent_moves.get(state)
 
             for move in self.iter_legal_moves(state):
@@ -84,12 +85,14 @@ class BestFSSolver(BaseSolver):
                 next_state = self.transition(state, move, validate=False)
        
                 f_next, weight = self.evaluate(current_g, move, next_state)
+                next_g = current_g + weight
+                next_key = next_state.canonical_key()
                 # If this is a new state or a shorter path to an existing state
-                if next_state not in g_score or current_g + weight < g_score[next_state]:
-                    g_score[next_state] = current_g + weight
+                if next_g < g_score.get(next_key, float("inf")):
+                    g_score[next_key] = next_g
                     parents[next_state] = state
                     parent_moves[next_state] = move
-                    heapq.heappush(frontier, (f_next, next(tie), next_state))
+                    heapq.heappush(frontier, (f_next, next_g, next(tie), next_state))
 
         return self.build_result(
             solved=False,

@@ -43,7 +43,7 @@ class MyCustomSolver(BaseSolver):
 Your solver must:
 
 1. **Explore the game state space** using `iter_legal_moves(initial_state)` to generate legal moves
-2. **Track visited states** to avoid cycles (use `state.key()` for hashing)
+2. **Track visited states** to avoid cycles (prefer `state.canonical_key()` for symmetry-aware dedup)
 3. **Check for victory** using `is_goal(state)`
 4. **Apply moves** using `transition(state, move, validate=False)`
 5. **Build the solution** by reconstructing the move sequence from initial state to goal
@@ -68,7 +68,8 @@ The efficient game state representation:
 - **`foundation_rank(suit_index)`** - Current rank in foundation 0-3
 - **`cascade_top(index)`** - Top card code in cascade
 - **`is_victory`** - Property: True if all cards in foundations
-- **`key()`** - Returns hashable tuple for state deduplication
+- **`canonical_key()`** - Returns symmetry-aware hashable key (recommended for solver dedup)
+- **`key()`** - Returns raw packed key (useful for debugging/comparison)
 
 ### Move Types
 Moves are tuples: `(source_type, source_index, destination_type, destination_index, count)`
@@ -93,8 +94,9 @@ class BFS(BaseSolver):
             return self.build_result(solved=True, moves=(), expanded_nodes=0)
         
         queue = deque([initial_state])
-        visited = {initial_state.key()}
-        parent = {initial_state.key(): None}
+        visited = {initial_state.canonical_key()}
+        parent = {initial_state: None}
+        parent_moves = {}
         
         expanded = 0
         while queue:
@@ -103,20 +105,20 @@ class BFS(BaseSolver):
             
             for move in self.iter_legal_moves(current):
                 next_state = self.transition(current, move, validate=False)
+                next_key = next_state.canonical_key()
                 
                 if self.is_goal(next_state):
-                    # Reconstruct path
-                    moves = self._reconstruct_path(parent, next_state)
+                    moves = self._reconstruct_moves(next_state, parent, parent_moves)
                     return self.build_result(
                         solved=True, 
                         moves=moves, 
                         expanded_nodes=expanded
                     )
                 
-                key = next_state.key()
-                if key not in visited:
-                    visited.add(key)
-                    parent[key] = (current, move)
+                if next_key not in visited:
+                    visited.add(next_key)
+                    parent[next_state] = current
+                    parent_moves[next_state] = move
                     queue.append(next_state)
         
         return self.build_result(solved=False, moves=(), expanded_nodes=expanded)
@@ -125,7 +127,7 @@ class BFS(BaseSolver):
 ## Performance Tips
 
 1. **Use `validate=False`** when applying moves in your search to skip redundant checks
-2. **Deduplicate states** using `state.key()` to avoid revisiting
+2. **Deduplicate states** using `state.canonical_key()` to collapse symmetric states
 3. **Prioritize moves** - Best-first or heuristic-guided search often beats BFS
 4. **Move ordering**: Foundation moves < Freecell moves < Cascade moves reduce branching
 5. **Memory efficiency**: Consider iterative deepening if memory is limited
