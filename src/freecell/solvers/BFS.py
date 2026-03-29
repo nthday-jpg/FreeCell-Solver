@@ -20,7 +20,7 @@ class BFSSolver(BaseSolver):
             )
 
         queue: deque[PackedState] = deque((initial_state,))
-        visited: set[PackedState] = {initial_state}
+        visited: set[tuple] = {initial_state.canonical_key()}
         parents: dict[PackedState, PackedState | None] = {initial_state: None}
         parent_moves: dict[PackedState, RawMove] = {}
 
@@ -33,10 +33,11 @@ class BFSSolver(BaseSolver):
             
             for move in self.iter_legal_moves(state):
                 next_state = self.transition(state, move, validate=False)
-                if next_state in visited:
+                next_key = next_state.canonical_key()
+                if next_key in visited:
                     continue
 
-                visited.add(next_state)
+                visited.add(next_key)
                 parents[next_state] = state
                 parent_moves[next_state] = move
 

@@ -48,18 +48,25 @@ class BaseSolver(ABC):
             
 		"""
 
-	def timed_solve(self, initial_state: PackedState) -> SolveResult:
-		tracemalloc.start()
+	def timed_solve(self, initial_state: PackedState, *, trace_peak_memory: bool = True) -> SolveResult:
+		if trace_peak_memory:
+			tracemalloc.start()
+
 		started = perf_counter()
 		result = self.solve(initial_state)
 		elapsed = perf_counter() - started
-		_, peak_memory_bytes = tracemalloc.get_traced_memory()
-		tracemalloc.stop()
+
+		peak_memory_usage = result.peak_memory_usage
+		if trace_peak_memory:
+			_, peak_memory_bytes = tracemalloc.get_traced_memory()
+			tracemalloc.stop()
+			peak_memory_usage = max(peak_memory_usage, float(peak_memory_bytes))
+
 		return SolveResult(
 			solved=result.solved,
 			moves=result.moves,
 			elapsed_seconds=elapsed,
-			peak_memory_usage=max(result.peak_memory_usage, float(peak_memory_bytes)),
+			peak_memory_usage=peak_memory_usage,
 			expanded_nodes=result.expanded_nodes,
 		)
 

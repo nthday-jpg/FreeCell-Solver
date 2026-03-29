@@ -151,6 +151,22 @@ class PackedState:
     def key(self) -> tuple[int, ...]:
         return (*self.cascade_words, self.cascade_lengths, self.freecells, self.foundations)
 
+    def canonical_key(self) -> tuple[int, tuple[int, ...], tuple[tuple[int, ...], ...]]:
+        # Foundations are suit-specific, so keep their native packed order.
+        foundations = self.foundations
+
+        # Freecells are interchangeable for search purposes.
+        freecells = tuple(sorted(self.freecell(index) for index in range(FREECELL_COUNT)))
+
+        # Cascade columns are interchangeable; compare by card-code tuples.
+        cascades: list[tuple[int, ...]] = []
+        for index in range(CASCADE_COUNT):
+            length = self.cascade_length(index)
+            word = self.cascade_words[index]
+            cascades.append(tuple((word >> (position * CARD_BITS)) & CARD_MASK for position in range(length)))
+
+        return (foundations, freecells, tuple(sorted(cascades)))
+
     def cascade_length(self, index: int) -> int:
         return (self.cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF
 
