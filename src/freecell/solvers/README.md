@@ -18,8 +18,7 @@ Extend `BaseSolver` from `base.py`:
 
 ```python
 from .base import BaseSolver, SolveResult
-from ..core.packed_state import PackedState
-from ..core.state import Move
+from ..core import PackedState, Move
 
 class MyCustomSolver(BaseSolver):
     def solve(self, initial_state: PackedState) -> SolveResult:

@@ -19,13 +19,13 @@ from .constants import (
 	FOUNDATION,
 	CASCADE,
 	EMPTY_CARD_CODE,
-	RawMove
 )
+from .move_types import RawMove
 
 
 if TYPE_CHECKING:
 	from .packed_state import PackedState
-	from .state import Move
+	from .move_types import Move
 
 
 
