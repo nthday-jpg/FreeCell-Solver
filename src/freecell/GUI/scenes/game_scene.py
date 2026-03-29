@@ -30,6 +30,9 @@ class GameScene(BaseScene):
         self.is_dragging = False
         self.drag_offset = (0, 0)
         self.drag_pos = (0, 0)
+        self.auto_run_solution = False
+        self._auto_phase = ""
+        self._auto_phase_end = 0.0
 
         if self.mode == "solver":
             self.solver_worker.start(
@@ -76,7 +79,29 @@ class GameScene(BaseScene):
             self._handle_solver_popup_events(events)
             return
         if button == "Next Step":
-            self._apply_solver_step()
+            if self.auto_run_solution:
+                self._set_message("Disabled during auto-run.", WARN_COLOR)
+            else:
+                self._apply_solver_step()
+        if button == "Auto Run":
+            # do nothing if there's no prepared solution or solver is still running
+            if not self.solver_solution or self.solver_worker.is_running:
+                self._set_message("No solver solution available.", WARN_COLOR)
+                return
+            # toggle auto-run: will wait 1s before applying a step, then pause 0.5s
+            if self.auto_run_solution:
+                self.auto_run_solution = False
+                self._set_message("Auto-run stopped.")
+            else:
+                self.auto_run_solution = True
+                self._auto_phase = "wait_before_apply"
+                self._auto_phase_end = pygame.time.get_ticks() / 1000.0 + 1.0
+                # disable any current drag/selection
+                self.selected_source = None
+                self.is_dragging = False
+                self._set_message("Auto-run started.")
+            return
+
         if button == "Menu":
             # TODO: save current session state for potential resume
             self.solver_worker.stop()
@@ -116,6 +141,21 @@ class GameScene(BaseScene):
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 self._handle_mouse_up(event.pos)
 
+        # Auto-run processing: non-blocking timer-driven step application
+        if self.auto_run_solution:
+            now = pygame.time.get_ticks() / 1000.0
+            if self._auto_phase == "wait_before_apply" and now >= self._auto_phase_end:
+                ok = self._apply_solver_step()
+                if not ok:
+                    self.auto_run_solution = False
+                    self._set_message("Auto-run finished.")
+                else:
+                    self._auto_phase = "pause_after_apply"
+                    self._auto_phase_end = now + 0.2
+            elif self._auto_phase == "pause_after_apply" and now >= self._auto_phase_end:
+                self._auto_phase = "wait_before_apply"
+                self._auto_phase_end = now + 0.8
+
     def _apply_solver_step(self) -> bool:
         if self.solver_solution_index >= len(self.solver_solution):
             self._set_message("No solver move available.", WARN_COLOR)
@@ -136,6 +176,8 @@ class GameScene(BaseScene):
 
     def _handle_mouse_down(self, mouse_pos: tuple[int, int]) -> None:
         if self.session.state.is_victory:
+            return
+        if self.auto_run_solution:
             return
             
         targets = self._board_targets()
@@ -190,10 +232,15 @@ class GameScene(BaseScene):
             self._set_message(f"Selected foundation {pile_index}.")
 
     def _handle_mouse_motion(self, mouse_pos: tuple[int, int]) -> None:
+        if self.auto_run_solution:
+            return
         if self.is_dragging:
             self.drag_pos = mouse_pos
 
     def _handle_mouse_up(self, mouse_pos: tuple[int, int]) -> None:
+        if self.auto_run_solution:
+            return
+
         if not self.is_dragging:
             return
 
@@ -245,6 +292,7 @@ class GameScene(BaseScene):
             ("Redo", pygame.Rect(445, 18, 120, 40)),
             ("Solver", pygame.Rect(580, 18, 120, 40)), # choose BFS, DFS, A*, UCS
             ("Next Step", pygame.Rect(715, 18, 120, 40)), # step through solver solution
+            ("Auto Run", pygame.Rect(850, 18, 120, 40)) # Disable manual card move.
         ]
         return draw_buttons(self.screen, self.assets.body_font, defs, events)
 
