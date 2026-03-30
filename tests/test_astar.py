@@ -20,10 +20,10 @@ def benchmark_astar_expansions(seed_value: int, target_expansions: int) -> Solve
 
 
 def main() -> None:
-    start_seed = 1
+    start_seed = 10
     target_expansions = 10000000
-    warmup_runs = 1
-    measured_runs = 5
+    warmup_runs = 0
+    measured_runs = 10
     current_seed = start_seed
 
     for run_index in range(1, warmup_runs + 1):

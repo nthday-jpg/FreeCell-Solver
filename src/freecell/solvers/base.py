@@ -7,6 +7,7 @@ import tracemalloc
 from typing import Iterator
 
 from ..core.constants import CARD_BITS, CARD_MASK, EMPTY_CARD_CODE
+from ..core.constants import MAX_CASCADE_CARDS
 from ..core.card import CARD_CODE_IS_RED, CARD_CODE_RANK, card_code_suit_index
 from ..core import Move, RawMove
 from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
@@ -141,6 +142,7 @@ class BaseSolver(ABC):
 				max_count = min(
 					source_len,
 					max_movable_cards(empty_freecells_total, auxiliary_empty_cascades),
+					MAX_CASCADE_CARDS - destination_len,
 				)
 				if max_count <= 0:
 					continue

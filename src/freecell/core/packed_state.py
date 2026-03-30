@@ -85,8 +85,8 @@ class PackedState:
         cascade_words: list[int] = [0] * CASCADE_COUNT
         cascade_lengths = 0
         for index, cascade in enumerate(state.cascades):
-            if len(cascade) > 13:
-                raise ValueError("Cascade cannot exceed 13 cards")
+            if len(cascade) > MAX_CASCADE_CARDS:
+                raise ValueError(f"Cascade cannot exceed {MAX_CASCADE_CARDS} cards")
             word = 0
             for position, card in enumerate(cascade):
                 word |= card_to_code(card) << (position * CARD_BITS)
@@ -162,6 +162,10 @@ class PackedState:
         cascades: list[int] = [0] * CASCADE_COUNT
         for index in range(CASCADE_COUNT):
             length = (cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF
+            if length > MAX_CASCADE_CARDS:
+                raise ValueError(
+                    f"Packed cascade length {length} exceeds representable maximum {MAX_CASCADE_CARDS}"
+                )
             normalized_word = cascade_words[index] & CASCADE_MASK[length]
             cascades[index] = (length << CASCADE_SORT_SHIFT) | normalized_word
         cascades.sort()

@@ -11,7 +11,8 @@ CASCADE_COUNT = 8
 FREECELL_COUNT = 4
 FOUNDATION_COUNT = 4
 MAX_FOUNDATION_RANK = 13
-MAX_CASCADE_CARDS = 13
+# Packed cascade length uses CASCADE_LEN_BITS per cascade.
+MAX_CASCADE_CARDS = (1 << CASCADE_LEN_BITS) - 1
 
 # Complete foundation mask (used for victory condition)
 FOUNDATION_COMPLETE_MASK = sum(
