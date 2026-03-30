@@ -97,7 +97,13 @@ def print_cascades(cascades: list[list[str]], color: bool = False) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Print FreeCell cascades in a grid format.")
-    parser.add_argument("--seed", type=int, help="Microsoft FreeCell deal number")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        nargs="+",
+        required=True,
+        help="One or more Microsoft FreeCell deal numbers",
+    )
 
     color_group = parser.add_mutually_exclusive_group()
     color_group.add_argument("--color", action="store_true", help="Force ANSI color output")
@@ -109,13 +115,14 @@ def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    if args.seed is not None:
-        cascades = seed_cascades(args.seed)
-    else:
-        raise ValueError("A --seed argument is required to specify the deal number")
-
     color = should_use_color(True if args.color else False if args.no_color else None)
-    print_cascades(cascades, color=color)
+    for index, seed in enumerate(args.seed):
+        if len(args.seed) > 1:
+            if index > 0:
+                print()
+            print(f"Seed {seed}:")
+        cascades = seed_cascades(seed)
+        print_cascades(cascades, color=color)
 
 
 if __name__ == "__main__":
