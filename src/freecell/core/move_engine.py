@@ -15,6 +15,7 @@ from .constants import (
 	CARD_MASK,
 	CASCADE_LEN_BITS,
 	FOUNDATION_BITS,
+	MAX_CASCADE_CARDS,
 	FREECELL,
 	FOUNDATION,
 	CASCADE,
@@ -108,6 +109,8 @@ def move_packed_freecell_to_cascade(
 		raise ValueError("Illegal placement on cascade")
 
 	dest_new_len = dest_len + 1
+	if dest_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
 	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
 
 	new_words = list(state.cascade_words)
@@ -223,6 +226,8 @@ def move_packed_foundation_to_cascade(
 		raise ValueError("Illegal placement on cascade")
 
 	dest_new_len = dest_len + 1
+	if dest_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
 	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
 
 	new_words = list(state.cascade_words)
@@ -319,6 +324,9 @@ def move_packed_cascade_to_cascade(
 			raise ValueError("Illegal placement on destination cascade")
 
 	source_new_len = source_len - count
+	destination_new_len = destination_len + count
+	if destination_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
 	source_keep_mask = (1 << (source_new_len * CARD_BITS)) - 1 if source_new_len > 0 else 0
 	source_new_word = source_word & source_keep_mask
 	destination_new_word = state.cascade_words[destination_index] | (moving_bits << (destination_len * CARD_BITS))
@@ -331,7 +339,7 @@ def move_packed_cascade_to_cascade(
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[source_index]
 	new_lengths |= source_new_len << (source_index * CASCADE_LEN_BITS)
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[destination_index]
-	new_lengths |= (destination_len + count) << (destination_index * CASCADE_LEN_BITS)
+	new_lengths |= destination_new_len << (destination_index * CASCADE_LEN_BITS)
 
 	return _new_state(
 		state,
