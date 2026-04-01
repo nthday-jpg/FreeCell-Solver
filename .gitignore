@@ -25,6 +25,7 @@ Thumbs.db
 .env
 
 # uv artifacts
+pyproject.toml
 uv.lock
 .uv/
 .python-version

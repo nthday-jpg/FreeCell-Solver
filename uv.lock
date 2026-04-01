@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 
 [manifest.dependency-groups]
 dev = [
+    { name = "freecell-solver", specifier = ">=0.6.0" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "pygame", specifier = ">=2.5" },
 ]
@@ -125,6 +126,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/cc/28/c14e053b6762b1044
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/ea/53f2148663b321f21b5a606bd5f191517cf40b7072c0497d3c92c4a13b1e/executing-2.2.1-py2.py3-none-any.whl", hash = "sha256:760643d3452b4d777d295bb167ccc74c64a81df23fb5e08eff250c425a4b2017", size = 28317, upload-time = "2025-09-01T09:48:08.5Z" },
 ]
+
+[[package]]
+name = "freecell-solver"
+version = "0.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/16/9be74a39b7a2e30ea755a278166f8baa81137338cf2472a51b565798ca19/freecell_solver-0.6.0.tar.gz", hash = "sha256:354be418ab23ed2afa30228b30e6af7eb245c7a8c150e8d0c48a06816b3b0733", size = 10798, upload-time = "2024-07-10T05:54:54.497Z" }
 
 [[package]]
 name = "ipykernel"
