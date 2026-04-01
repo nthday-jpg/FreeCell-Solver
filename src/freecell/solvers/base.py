@@ -118,6 +118,8 @@ class BaseSolver(ABC):
 			if card_code == EMPTY_CARD_CODE:
 				continue
 			for destination_index in range(state.cascade_count):
+				if state.cascade_length(destination_index) >= MAX_CASCADE_CARDS:
+					continue
 				destination_top_code = state.cascade_top(destination_index)
 				if can_stack_on_cascade_code(card_code, destination_top_code):
 					yield (FREECELL, source_index, CASCADE, destination_index, 1)
