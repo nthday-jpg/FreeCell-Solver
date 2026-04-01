@@ -180,6 +180,32 @@ class BaseSolver(ABC):
 			peak_memory_usage=peak_memory_usage,
 			expanded_nodes=expanded_nodes,
 		)
+
+	@staticmethod
+	def _is_reversal(prev: RawMove, cur: RawMove) -> bool:
+		p_src, p_si, p_dst, p_di, p_c = prev
+		c_src, c_si, c_dst, c_di, c_c = cur
+		return (
+			c_src == p_dst
+			and c_si == p_di
+			and c_dst == p_src
+			and c_di == p_si
+			and c_c == p_c
+		)
+
+	@staticmethod
+	def _raw_move_to_move(raw: RawMove) -> Move:
+		source, source_index, destination, destination_index, count = raw
+		source_name = "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
+		destination_name = "cascade" if destination == CASCADE else "freecell" if destination == FREECELL else "foundation"
+		return Move(
+			source=source_name,
+			source_index=source_index,
+			destination=destination_name,
+			destination_index=destination_index,
+			count=count,
+		)
+
 	@staticmethod
 	def _reconstruct_moves(
         goal_state: PackedState,
@@ -193,18 +219,7 @@ class BaseSolver(ABC):
 			move = parent_moves.get(current)
 			if move is None:
 				break
-			source, source_index, destination, destination_index, count = move
-			source_name = "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
-			destination_name = "cascade" if destination == CASCADE else "freecell" if destination == FREECELL else "foundation"
-			moves_reversed.append(
-				Move(
-					source=source_name,
-					source_index=source_index,
-					destination=destination_name,
-					destination_index=destination_index,
-					count=count,
-				)
-			)
+			moves_reversed.append(BaseSolver._raw_move_to_move(move))
 			parent = parents[current]
 			if parent is None:
 				break

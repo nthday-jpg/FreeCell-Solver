@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from time import perf_counter
 
-from .base import BaseSolver, RawMove
-from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
-from ..core import PackedState, Move
+from .base import BaseSolver, RawMove, SolveResult
+from ..core import PackedState
 
 
-StateKey = tuple[int, ...]
+StateKey = tuple[int, tuple[int, ...], tuple[int, ...]]
 
 
 class IDSSolver(BaseSolver):
@@ -33,8 +32,10 @@ class IDSSolver(BaseSolver):
         for depth_limit in range(max_d + 1):
             best_depth: dict[StateKey, int] = {}
             path_keys: set[StateKey] = set()
+            parents: dict[PackedState, PackedState | None] = {initial_state: None}
+            parent_moves: dict[PackedState, RawMove] = {}
 
-            raw_moves = self._depth_limited_search(
+            goal_state = self._depth_limited_search(
                 initial_state,
                 depth_limit,
                 depth_from_root=0,
@@ -42,12 +43,14 @@ class IDSSolver(BaseSolver):
                 best_depth=best_depth,
                 prev_move=None,
                 expanded_nodes=expanded_nodes,
+                parents=parents,
+                parent_moves=parent_moves,
             )
 
-            if raw_moves is not None:
+            if goal_state is not None:
                 return self.build_result(
                     solved=True,
-                    moves=tuple(self._raw_move_to_move(m) for m in raw_moves),
+                    moves=self._reconstruct_moves(goal_state, parents, parent_moves),
                     expanded_nodes=expanded_nodes[0],
                     elapsed_seconds=perf_counter() - started,
                 )
@@ -71,12 +74,14 @@ class IDSSolver(BaseSolver):
         best_depth: dict[StateKey, int],
         prev_move: RawMove | None,
         expanded_nodes: list[int],
-    ) -> tuple[RawMove, ...] | None:
-        key = state.key()
+        parents: dict[PackedState, PackedState | None],
+        parent_moves: dict[PackedState, RawMove],
+    ) -> PackedState | None:
+        key = state.canonical_key()
 
         if self.is_goal(state):
             expanded_nodes[0] += 1
-            return ()
+            return state
 
         if key in path_keys:
             return None
@@ -101,6 +106,8 @@ class IDSSolver(BaseSolver):
                 if prev_move is not None and self._is_reversal(prev_move, move):
                     continue
                 next_state = self.transition(state, move, validate=False)
+                parents[next_state] = state
+                parent_moves[next_state] = move
                 sub = self._depth_limited_search(
                     next_state,
                     depth_remaining - 1,
@@ -109,42 +116,11 @@ class IDSSolver(BaseSolver):
                     best_depth,
                     move,
                     expanded_nodes,
+                    parents,
+                    parent_moves,
                 )
                 if sub is not None:
-                    return (move,) + sub
+                    return sub
             return None
         finally:
             path_keys.discard(key)
-
-    @staticmethod
-    def _is_reversal(prev: RawMove, cur: RawMove) -> bool:
-        p_src, p_si, p_dst, p_di, p_c = prev
-        c_src, c_si, c_dst, c_di, c_c = cur
-        return (
-            c_src == p_dst
-            and c_si == p_di
-            and c_dst == p_src
-            and c_di == p_si
-            and c_c == p_c
-        )
-
-    @staticmethod
-    def _raw_move_to_move(raw: RawMove) -> Move:
-        source, source_index, destination, destination_index, count = raw
-        source_name = (
-            "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
-        )
-        destination_name = (
-            "cascade"
-            if destination == CASCADE
-            else "freecell"
-            if destination == FREECELL
-            else "foundation"
-        )
-        return Move(
-            source=source_name,
-            source_index=source_index,
-            destination=destination_name,
-            destination_index=destination_index,
-            count=count,
-        )
