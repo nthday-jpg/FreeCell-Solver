@@ -49,6 +49,25 @@ class IDSSolverTests(unittest.TestCase):
             current = current.apply_move(move)
         self.assertTrue(current.is_victory)
 
+    def test_custom_depth_scheduler_is_used(self) -> None:
+        state = GameState(
+            cascades=((c("KS"),), tuple(), tuple(), tuple(), tuple(), tuple(), tuple(), tuple()),
+            freecells=(None,) * 4,
+            foundations=(13, 13, 13, 12),
+        ).to_packed()
+
+        calls: list[int] = []
+
+        def scheduler(step: int) -> int:
+            calls.append(step)
+            return step
+
+        result = IDSSolver(max_depth=5, depth_limit_scheduler=scheduler).solve(state)
+
+        self.assertTrue(result.solved)
+        self.assertGreaterEqual(result.move_count, 1)
+        self.assertEqual(calls[:2], [0, 1])
+
     def test_replay_seed_if_solved(self) -> None:
         initial = GameState.initial(seed=1).to_packed()
 

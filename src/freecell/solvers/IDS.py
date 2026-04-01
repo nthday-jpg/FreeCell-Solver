@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from time import perf_counter
 
 from .base import BaseSolver, RawMove, SolveResult
@@ -12,9 +13,15 @@ StateKey = tuple[int, tuple[int, ...], tuple[int, ...]]
 class IDSSolver(BaseSolver):
 
 
-    def __init__(self, max_depth: int | None = 200, max_expansions: int | None = None):
+    def __init__(
+        self,
+        max_depth: int | None = 200,
+        max_expansions: int | None = None,
+        depth_limit_scheduler: Callable[[int], int] | None = None,
+    ):
         self.max_depth = max_depth
         self.max_expansions = max_expansions
+        self.depth_limit_scheduler = depth_limit_scheduler
 
     def solve(self, initial_state: PackedState) -> SolveResult:
         started = perf_counter()
@@ -27,9 +34,7 @@ class IDSSolver(BaseSolver):
             )
 
         expanded_nodes = [0]
-        max_d = self.max_depth if self.max_depth is not None else 10**9
-
-        for depth_limit in range(max_d + 1):
+        for depth_limit in self._iter_depth_limits():
             best_depth: dict[StateKey, int] = {}
             path_keys: set[StateKey] = set()
             parents: dict[PackedState, PackedState | None] = {initial_state: None}
@@ -64,6 +69,26 @@ class IDSSolver(BaseSolver):
             expanded_nodes=expanded_nodes[0],
             elapsed_seconds=perf_counter() - started,
         )
+
+    def _iter_depth_limits(self) -> Iterator[int]:
+        if self.depth_limit_scheduler is None:
+            max_d = self.max_depth if self.max_depth is not None else 10**9
+            yield from range(max_d + 1)
+            return
+
+        previous_depth = -1
+        step = 0
+        while True:
+            depth_limit = self.depth_limit_scheduler(step)
+            if depth_limit < 0:
+                raise ValueError("depth_limit_scheduler must return non-negative depth limits")
+            if depth_limit <= previous_depth:
+                raise ValueError("depth_limit_scheduler must return strictly increasing depth limits")
+            if self.max_depth is not None and depth_limit > self.max_depth:
+                return
+            yield depth_limit
+            previous_depth = depth_limit
+            step += 1
 
     def _depth_limited_search(
         self,
