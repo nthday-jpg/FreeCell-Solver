@@ -6,9 +6,7 @@ from freecell.GUI.ui.components import draw_buttons
 class MenuScene(BaseScene):
     def handle_events(self, events: list[pygame.event.Event]) -> None:
         button = self._menu_buttons(events)
-        if button == "Play Manual":
-            self.change_scene("game", "manual")
-        elif button == "Play Using Solver":
+        if button == "Play Game":
             self.change_scene("game", "solver")
         elif button == "Settings":
             self.change_scene("settings")
@@ -27,8 +25,9 @@ class MenuScene(BaseScene):
             return rect
 
         defs = [
-            ("Play Manual", make_rect(260)),
-            ("Play Using Solver", make_rect(328)),
+            # TODO: add more options like "Resume Game" if there's a saved session
+            # Modify the spacing for aesthetic
+            ("Play Game", make_rect(260)),
             ("Settings", make_rect(396)),
             ("Quit", make_rect(464)),
         ]
