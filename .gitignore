@@ -24,5 +24,10 @@ Thumbs.db
 # Private secrets
 .env
 
+# uv artifacts
+uv.lock
+.uv/
+.python-version
+
 *.md
 !README.md

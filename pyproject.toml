@@ -1,4 +1,5 @@
 [dependency-groups]
 dev = [
+    "ipykernel>=7.2.0",
     "pygame>=2.5",
 ]
