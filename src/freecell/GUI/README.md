@@ -5,7 +5,7 @@ This guide explains how to use the FreeCell game core (`src/freecell/core/`) fro
 ## Quick Start
 
 ```python
-from src.freecell.core.state import GameState, Move
+from src.freecell.core import GameState, Move
 
 # 1. Create a new game
 game = GameState.initial(seed=1)  # Deal #1
@@ -99,7 +99,7 @@ clubs_rank = game.foundation_rank("C")
 ### Move Structure
 
 ```python
-from src.freecell.core.state import Move
+from src.freecell.core import Move
 
 move = Move(
     source="cascade",           # "cascade", "freecell", or "foundation"
@@ -324,7 +324,7 @@ def auto_play_to_foundation(game: GameState) -> GameState:
 
 ```python
 import functools
-from src.freecell.core.state import GameState, Move
+from src.freecell.core import GameState, Move
 
 # GameState is immutable and hashable (frozen dataclass)
 # Safe to use as dict keys or cache decorator argument
@@ -349,7 +349,7 @@ new_game = game.apply_move(move)  # Returns NEW GameState
 ## Error Handling
 
 ```python
-from src.freecell.core.state import Move, GameState
+from src.freecell.core import Move, GameState
 
 def safe_move(game: GameState, move: Move) -> tuple[bool, GameState, str]:
     """Apply move with error handling."""

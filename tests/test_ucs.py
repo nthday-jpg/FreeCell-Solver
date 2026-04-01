@@ -90,7 +90,7 @@ class UCSSolverCorrectnessTests(unittest.TestCase):
         result = UCSSolver(max_expansions=10000).solve(state)
 
         self.assertFalse(result.solved)
-        self.assertEqual(result.moves, ())\
+        self.assertEqual(result.moves, ())
 
 if __name__ == "__main__":
     unittest.main()

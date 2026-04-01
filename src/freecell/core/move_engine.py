@@ -15,17 +15,18 @@ from .constants import (
 	CARD_MASK,
 	CASCADE_LEN_BITS,
 	FOUNDATION_BITS,
+	MAX_CASCADE_CARDS,
 	FREECELL,
 	FOUNDATION,
 	CASCADE,
 	EMPTY_CARD_CODE,
-	RawMove
 )
+from .move_types import RawMove
 
 
 if TYPE_CHECKING:
 	from .packed_state import PackedState
-	from .state import Move
+	from .move_types import Move
 
 
 
@@ -108,6 +109,8 @@ def move_packed_freecell_to_cascade(
 		raise ValueError("Illegal placement on cascade")
 
 	dest_new_len = dest_len + 1
+	if dest_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
 	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
 
 	new_words = list(state.cascade_words)
@@ -204,6 +207,83 @@ def move_packed_freecell_to_foundation(
 	)
 
 
+def move_packed_foundation_to_cascade(
+	state: "PackedState",
+	suit_index: int,
+	cascade_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
+	rank = state.foundation_rank(suit_index)
+	if validate and rank == 0:
+		raise ValueError("Source foundation is empty")
+
+	moving = ((rank - 1) << 2) | suit_index
+
+	dest_len = state.cascade_length(cascade_index)
+	destination_top = state.cascade_top(cascade_index)
+	if validate and not can_stack_on_cascade_code(moving, destination_top):
+		raise ValueError("Illegal placement on cascade")
+
+	dest_new_len = dest_len + 1
+	if dest_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
+	dest_new_word = state.cascade_words[cascade_index] | (moving << (dest_len * CARD_BITS))
+
+	new_words = list(state.cascade_words)
+	new_words[cascade_index] = dest_new_word
+
+	new_lengths = (
+		state.cascade_lengths
+		& ~_SLOT_MASKS_CASCADE_LEN[cascade_index]
+		| (dest_new_len << (cascade_index * CASCADE_LEN_BITS))
+	)
+
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
+	new_foundations |= ((rank - 1) << (suit_index * FOUNDATION_BITS))
+
+	return _new_state(
+		state,
+		cascade_words=tuple(new_words),
+		cascade_lengths=new_lengths,
+		freecells=state.freecells,
+		foundations=new_foundations,
+	)
+
+
+def move_packed_foundation_to_freecell(
+	state: "PackedState",
+	suit_index: int,
+	freecell_index: int,
+	*,
+	validate: bool = True,
+) -> "PackedState":
+	rank = state.foundation_rank(suit_index)
+	if validate and rank == 0:
+		raise ValueError("Source foundation is empty")
+	if validate and state.freecell(freecell_index) != EMPTY_CARD_CODE:
+		raise ValueError("Destination freecell is occupied")
+
+	moving = ((rank - 1) << 2) | suit_index
+
+	new_freecells = (
+		state.freecells
+		& ~_SLOT_MASKS_CARD[freecell_index]
+		| (moving << (freecell_index * CARD_BITS))
+	)
+
+	new_foundations = state.foundations & ~_SLOT_MASKS_FOUNDATION[suit_index]
+	new_foundations |= ((rank - 1) << (suit_index * FOUNDATION_BITS))
+
+	return _new_state(
+		state,
+		cascade_words=state.cascade_words,
+		cascade_lengths=state.cascade_lengths,
+		freecells=new_freecells,
+		foundations=new_foundations,
+	)
+
+
 def move_packed_cascade_to_cascade(
 		state: "PackedState", 
 		source_index: int, 
@@ -244,6 +324,9 @@ def move_packed_cascade_to_cascade(
 			raise ValueError("Illegal placement on destination cascade")
 
 	source_new_len = source_len - count
+	destination_new_len = destination_len + count
+	if destination_new_len > MAX_CASCADE_CARDS:
+		raise ValueError(f"Destination cascade exceeds max representable length {MAX_CASCADE_CARDS}")
 	source_keep_mask = (1 << (source_new_len * CARD_BITS)) - 1 if source_new_len > 0 else 0
 	source_new_word = source_word & source_keep_mask
 	destination_new_word = state.cascade_words[destination_index] | (moving_bits << (destination_len * CARD_BITS))
@@ -256,7 +339,7 @@ def move_packed_cascade_to_cascade(
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[source_index]
 	new_lengths |= source_new_len << (source_index * CASCADE_LEN_BITS)
 	new_lengths = new_lengths & ~_SLOT_MASKS_CASCADE_LEN[destination_index]
-	new_lengths |= (destination_len + count) << (destination_index * CASCADE_LEN_BITS)
+	new_lengths |= destination_new_len << (destination_index * CASCADE_LEN_BITS)
 
 	return _new_state(
 		state,
@@ -310,6 +393,24 @@ def apply_packed_raw_move(state: "PackedState", move: "RawMove", *, validate: bo
 		return move_packed_freecell_to_foundation(
 			state,
 			source_index,
+			validate=validate,
+		)
+	if source == FOUNDATION and destination == CASCADE:
+		if validate and count != 1:
+			raise ValueError("Only one card can be moved from foundation")
+		return move_packed_foundation_to_cascade(
+			state,
+			source_index,
+			destination_index,
+			validate=validate,
+		)
+	if source == FOUNDATION and destination == FREECELL:
+		if validate and count != 1:
+			raise ValueError("Only one card can be moved from foundation")
+		return move_packed_foundation_to_freecell(
+			state,
+			source_index,
+			destination_index,
 			validate=validate,
 		)
 	raise ValueError(f"Unsupported move: {move}")

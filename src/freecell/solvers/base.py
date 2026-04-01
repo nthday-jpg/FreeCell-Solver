@@ -6,17 +6,17 @@ from time import perf_counter
 import tracemalloc
 from typing import Iterator
 
-from ..core.constants import EMPTY_CARD_CODE, RawMove
-from ..core.card import card_code_suit_index
+from ..core.constants import CARD_BITS, CARD_MASK, EMPTY_CARD_CODE
+from ..core.constants import MAX_CASCADE_CARDS
+from ..core.card import CARD_CODE_IS_RED, CARD_CODE_RANK, card_code_suit_index
+from ..core import Move, RawMove
 from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from ..core.packed_state import PackedState
 from ..core.rules import (
 	can_move_to_foundation_code,
 	can_stack_on_cascade_code,
-	is_descending_alternating_codes,
 	max_movable_cards,
 )
-from ..core.state import Move
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,18 +48,25 @@ class BaseSolver(ABC):
             
 		"""
 
-	def timed_solve(self, initial_state: PackedState) -> SolveResult:
-		tracemalloc.start()
+	def timed_solve(self, initial_state: PackedState, *, trace_peak_memory: bool = True) -> SolveResult:
+		if trace_peak_memory:
+			tracemalloc.start()
+
 		started = perf_counter()
 		result = self.solve(initial_state)
 		elapsed = perf_counter() - started
-		_, peak_memory_bytes = tracemalloc.get_traced_memory()
-		tracemalloc.stop()
+
+		peak_memory_usage = result.peak_memory_usage
+		if trace_peak_memory:
+			_, peak_memory_bytes = tracemalloc.get_traced_memory()
+			tracemalloc.stop()
+			peak_memory_usage = max(peak_memory_usage, float(peak_memory_bytes))
+
 		return SolveResult(
 			solved=result.solved,
 			moves=result.moves,
 			elapsed_seconds=elapsed,
-			peak_memory_usage=max(result.peak_memory_usage, float(peak_memory_bytes)),
+			peak_memory_usage=peak_memory_usage,
 			expanded_nodes=result.expanded_nodes,
 		)
 
@@ -119,10 +126,12 @@ class BaseSolver(ABC):
 		empty_cascades_total = state.cascade_count_empty()
 		empty_freecells_total = state.freecell_count_empty()
 		cascade_lengths = [state.cascade_length(i) for i in range(state.cascade_count)]
+		cascade_words = state.cascade_words
 
 		for source_index, source_len in enumerate(cascade_lengths):
 			if source_len == 0:
 				continue
+			source_word = cascade_words[source_index]
 			for destination_index, destination_len in enumerate(cascade_lengths):
 				if source_index == destination_index:
 					continue
@@ -133,14 +142,26 @@ class BaseSolver(ABC):
 				max_count = min(
 					source_len,
 					max_movable_cards(empty_freecells_total, auxiliary_empty_cascades),
+					MAX_CASCADE_CARDS - destination_len,
 				)
+				if max_count <= 0:
+					continue
 
+				head_code: int | None = None
 				for count in range(1, max_count + 1):
-					moving_stack = state.cascade_tail_codes(source_index, count)
-					if not is_descending_alternating_codes(moving_stack):
-						continue
-					moving_code = moving_stack[0]
+					# Pull the moving head card directly from packed bits.
+					position = source_len - count
+					moving_code = (source_word >> (position * CARD_BITS)) & CARD_MASK
 
+					# As the moving stack grows by one card, only the new head-to-previous-head
+					# relation needs checking; if it fails once, larger stacks will also fail.
+					if head_code is not None:
+						if CARD_CODE_RANK[moving_code] != CARD_CODE_RANK[head_code] + 1:
+							break
+						if CARD_CODE_IS_RED[moving_code] == CARD_CODE_IS_RED[head_code]:
+							break
+
+					head_code = moving_code
 					if can_stack_on_cascade_code(moving_code, destination_top_code):
 						yield (CASCADE, source_index, CASCADE, destination_index, count)
 
@@ -159,3 +180,35 @@ class BaseSolver(ABC):
 			peak_memory_usage=peak_memory_usage,
 			expanded_nodes=expanded_nodes,
 		)
+	@staticmethod
+	def _reconstruct_moves(
+        goal_state: PackedState,
+        parents: dict[PackedState, PackedState | None],
+        parent_moves: dict[PackedState, RawMove],
+    ) -> tuple[Move, ...]:
+		moves_reversed: list[Move] = []
+		current = goal_state
+
+		while True:
+			move = parent_moves.get(current)
+			if move is None:
+				break
+			source, source_index, destination, destination_index, count = move
+			source_name = "cascade" if source == CASCADE else "freecell" if source == FREECELL else "foundation"
+			destination_name = "cascade" if destination == CASCADE else "freecell" if destination == FREECELL else "foundation"
+			moves_reversed.append(
+				Move(
+					source=source_name,
+					source_index=source_index,
+					destination=destination_name,
+					destination_index=destination_index,
+					count=count,
+				)
+			)
+			parent = parents[current]
+			if parent is None:
+				break
+			current = parent
+
+		moves_reversed.reverse()
+		return tuple(moves_reversed)

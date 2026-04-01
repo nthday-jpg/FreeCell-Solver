@@ -27,23 +27,19 @@ from .constants import (
     FOUNDATION_BITS,
     CASCADE_LEN_BITS,
     MAX_FOUNDATION_RANK,
+    MAX_CASCADE_CARDS,
     FOUNDATION_COMPLETE_MASK,
     EMPTY_CARD_CODE,
-    RawMove
+    CASCADE_MASK,
+    CASCADE_SORT_SHIFT,
+    FC_SHIFTS,
 ) 
+from .move_types import RawMove
 
 if TYPE_CHECKING:
     from .state import GameState
-    from .state import Move
+    from .move_types import Move
 
-
-FOUNDATION_BITS = 4
-CASCADE_LEN_BITS = 4
-MAX_FOUNDATION_RANK = 13
-FOUNDATION_COMPLETE_MASK = sum(
-    MAX_FOUNDATION_RANK << (i * FOUNDATION_BITS)
-    for i in range(FOUNDATION_COUNT)
-)
 
 @dataclass(frozen=True, slots=True)
 class PackedState:
@@ -89,8 +85,8 @@ class PackedState:
         cascade_words: list[int] = [0] * CASCADE_COUNT
         cascade_lengths = 0
         for index, cascade in enumerate(state.cascades):
-            if len(cascade) > 13:
-                raise ValueError("Cascade cannot exceed 13 cards")
+            if len(cascade) > MAX_CASCADE_CARDS:
+                raise ValueError(f"Cascade cannot exceed {MAX_CASCADE_CARDS} cards")
             word = 0
             for position, card in enumerate(cascade):
                 word |= card_to_code(card) << (position * CARD_BITS)
@@ -150,6 +146,31 @@ class PackedState:
 
     def key(self) -> tuple[int, ...]:
         return (*self.cascade_words, self.cascade_lengths, self.freecells, self.foundations)
+
+    def canonical_key(self) -> tuple[int, tuple[int, ...], tuple[int, ...]]:
+        # Foundations are suit-specific, so keep their native packed order.
+        foundations = self.foundations
+
+        # Freecells are interchangeable for search purposes.
+        freecell_bits = self.freecells
+        freecells = tuple(sorted((freecell_bits >> shift) & CARD_MASK for shift in FC_SHIFTS))
+
+        # Cascade columns are interchangeable. Encode each cascade as a single int:
+        # high bits = length, low bits = normalized packed word.
+        cascade_lengths = self.cascade_lengths
+        cascade_words = self.cascade_words
+        cascades: list[int] = [0] * CASCADE_COUNT
+        for index in range(CASCADE_COUNT):
+            length = (cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF
+            if length > MAX_CASCADE_CARDS:
+                raise ValueError(
+                    f"Packed cascade length {length} exceeds representable maximum {MAX_CASCADE_CARDS}"
+                )
+            normalized_word = cascade_words[index] & CASCADE_MASK[length]
+            cascades[index] = (length << CASCADE_SORT_SHIFT) | normalized_word
+        cascades.sort()
+
+        return (foundations, freecells, tuple(cascades))
 
     def cascade_length(self, index: int) -> int:
         return (self.cascade_lengths >> (index * CASCADE_LEN_BITS)) & 0xF

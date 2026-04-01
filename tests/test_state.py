@@ -11,8 +11,8 @@ if str(SRC_DIR) not in sys.path:
 
 from freecell.core.card import Card
 from freecell.core.card import card_to_code, code_to_card
+from freecell.core import GameState, Move
 from freecell.core.packed_state import PackedState
-from freecell.core.state import GameState, Move
 
 
 def c(short_name: str) -> Card:
