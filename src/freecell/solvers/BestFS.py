@@ -15,12 +15,12 @@ class BestFSSolver(BaseSolver):
         parent_g: int, 
         move: RawMove | None,
         state: PackedState,
-    ) -> tuple[int, int]:
+    ) -> tuple[float, int]:
         """
         Calculates f(n) = g(n) + h(n).
         g: number of moves taken from start.
         h: estimated moves to goal.
-        Return f_next and new true cost
+        Return f_next (priority score) and new true cost
         """
         pass
 

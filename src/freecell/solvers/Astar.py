@@ -10,7 +10,7 @@ class AstarSolver(BestFSSolver):
         parent_g: int, 
         move: RawMove | None,
         state: PackedState,
-    ) -> tuple[int, int]:
+    ) -> tuple[float, int]:
         """
         Calculates f(n) = g(n) + h(n).
         g: number of moves taken from start.
