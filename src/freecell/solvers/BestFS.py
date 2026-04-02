@@ -15,12 +15,12 @@ class BestFSSolver(BaseSolver):
         parent_g: int, 
         move: RawMove | None,
         state: PackedState,
-    ) -> tuple[int, int]:
+    ) -> tuple[float, int]:
         """
         Calculates f(n) = g(n) + h(n).
         g: number of moves taken from start.
         h: estimated moves to goal.
-        Return f_next and new true cost
+        Return f_next (priority score) and new true cost
         """
         pass
 
@@ -100,10 +100,3 @@ class BestFSSolver(BaseSolver):
             expanded_nodes=expanded_nodes,
             elapsed_seconds=perf_counter() - started
         )
-
-    @staticmethod
-    def _is_reversal(p: RawMove, c: RawMove) -> bool:
-        # p=previous, c=current. move format: (src, src_idx, dst, dst_idx, count)
-        return (c[0] == p[2] and c[1] == p[3] and  # current src is prev dst
-                c[2] == p[0] and c[3] == p[1] and  # current dst is prev src
-                c[4] == p[4])                      # same card count

@@ -1,1 +1,2 @@
 pygame>=2.5
+joblib>=1.4

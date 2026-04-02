@@ -1,4 +1,0 @@
-[dependency-groups]
-dev = [
-    "pygame>=2.5",
-]
