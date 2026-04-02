@@ -154,7 +154,7 @@ def main():
     
     data = {}
     data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
-    data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    # data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
     data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
     data["A*"] = evaluate_solver(AstarSolver, "A*", seeds, max_expansions)
     
