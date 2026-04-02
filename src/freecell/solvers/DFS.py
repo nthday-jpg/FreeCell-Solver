@@ -10,9 +10,6 @@ sys.setrecursionlimit(10000)
 
 
 class DFSSolver(BaseSolver):
-	def __init__(self, max_expansions: int | None = None):
-		self.max_expansions = max_expansions
-
 	def solve(self, initial_state: PackedState) -> SolveResult:
 		started = perf_counter()
 		results = self.solve_k(initial_state, k=1)

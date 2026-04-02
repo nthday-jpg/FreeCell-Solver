@@ -8,10 +8,6 @@ from ..core import PackedState, Move
 
 
 class BFSSolver(BaseSolver):
-    def __init__(self, max_expansions: int | None = None):
-        super().__init__()
-        self.max_expansions = max_expansions
-
     def solve(self, initial_state: PackedState) -> SolveResult:
         started = perf_counter()
         if self.is_goal(initial_state):

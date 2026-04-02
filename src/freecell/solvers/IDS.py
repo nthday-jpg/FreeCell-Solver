@@ -23,8 +23,8 @@ class IDSSolver(BaseSolver):
         max_expansions: int | None = None,
         depth_limit_scheduler: Callable[[int], int] | None = None,
     ):
+        super().__init__(max_expansions=max_expansions)
         self.max_depth = max_depth
-        self.max_expansions = max_expansions
         self.depth_limit_scheduler = depth_limit_scheduler
 
     def solve(self, initial_state: PackedState) -> SolveResult:
