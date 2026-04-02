@@ -1,3 +1,5 @@
+from freecell.core.card import SUIT_TO_INDEX, SUITS
+
 from .BestFS import BestFSSolver
 from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from .base import RawMove
@@ -96,6 +98,51 @@ class AstarSolver(BestFSSolver):
 
     def h_disorder(self, state: PackedState) -> float:
         return float(self._calculate_disorder(state))
+
+    def h_suit_blocking(self, state: PackedState) -> float:
+        from ..core.card import SUITS, SUIT_TO_INDEX, Card, card_to_code, code_to_card
+        
+        # Get the foundation targets (next card needed for each suit)
+        targets_set = set()
+        for suit in SUITS:
+            suit_idx = SUIT_TO_INDEX[suit]
+            current_rank = state.foundation_rank(suit_idx)
+            if current_rank < 13:
+                next_rank = current_rank + 1
+                target_card = Card(next_rank, suit)
+                targets_set.add(card_to_code(target_card))
+        
+        extra_moves = 0
+        
+        # Iterate through each cascade (tableau column)
+        for c_idx in range(state.cascade_count):
+            length = state.cascade_length(c_idx)
+            found_target_in_column = False
+            
+            # Look for a target card in this column
+            for pos in range(length):
+                card_code = state.cascade_card_code(c_idx, pos)
+                
+                # If this card is a target the foundation needs...
+                if card_code in targets_set:
+                    # Count how many cards are ON TOP of this target card
+                    # Cards on top are those at positions pos+1, pos+2, ..., length-1
+                    cards_on_top = length - pos - 1
+                    
+                    # For each card on top, check if it's a blocker
+                    for top_pos in range(pos + 1, length):
+                        blocker_code = state.cascade_card_code(c_idx, top_pos)
+                        
+                        # If the blocker card itself isn't a foundation target,
+                        # it MUST be moved to get the target card exposed
+                        if blocker_code not in targets_set:
+                            extra_moves += 1
+                    
+                    # We've found and processed a target in this column
+                    found_target_in_column = True
+                    break
+        
+        return float(extra_moves)
 
     def _calculate_disorder(self, state: PackedState) -> int:
         total_disorder = 0
