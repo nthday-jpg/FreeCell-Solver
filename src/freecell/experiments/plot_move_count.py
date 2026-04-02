@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib
 from pathlib import Path
 import sys
@@ -12,28 +13,19 @@ if str(SRC_DIR) not in sys.path:
 
 from freecell.core.state import GameState
 from freecell.solvers.Astar import AstarSolver
-
+import matplotlib.pyplot as plt
 
 START_SEED = 1
-END_SEED = 11
+END_SEED = 500
 MAX_EXPANSIONS = 500_000
-SAVE_PLOT_PATH: str | None = None
-
+SAVE_PLOT_PATH: str | None = "/kaggle/working/astar.png"
+SAVE_CSV_PATH: str | None = None
 
 def run() -> None:
-	if END_SEED < START_SEED:
-		raise ValueError("end-seed must be >= start-seed")
-
-	try:
-		plt = importlib.import_module("matplotlib.pyplot")
-	except ImportError as exc:
-		raise RuntimeError(
-			"matplotlib is required for plotting. Install it with: pip install matplotlib"
-		) from exc
-
 	solver = AstarSolver(max_expansions=MAX_EXPANSIONS)
 	move_counts: list[int] = []
 	solved_expansion_counts: list[int] = []
+	rows: list[dict[str, str | int]] = []
 
 	total = END_SEED - START_SEED + 1
 	solved_count = 0
@@ -48,12 +40,39 @@ def run() -> None:
 				solved_count += 1
 				move_counts.append(result.move_count)
 				solved_expansion_counts.append(result.expanded_nodes)
+				rows.append(
+					{
+						"seed": seed,
+						"status": "solved",
+						"move_count": result.move_count,
+						"expanded_nodes": result.expanded_nodes,
+						"error": "",
+					}
+				)
 				print(f"seed={seed:>4} solved moves={result.move_count:>4} expanded={result.expanded_nodes}")
 			else:
 				unsolved_count += 1
+				rows.append(
+					{
+						"seed": seed,
+						"status": "unsolved",
+						"move_count": "",
+						"expanded_nodes": result.expanded_nodes,
+						"error": "",
+					}
+				)
 				print(f"seed={seed:>4} unsolved expanded={result.expanded_nodes}")
 		except Exception as exc:
 			exception_count += 1
+			rows.append(
+				{
+					"seed": seed,
+					"status": "error",
+					"move_count": "",
+					"expanded_nodes": "",
+					"error": f"{type(exc).__name__}: {exc}",
+				}
+			)
 			print(f"seed={seed:>4} error={type(exc).__name__}: {exc}")
 
 	failure_count = unsolved_count + exception_count
@@ -102,8 +121,24 @@ def run() -> None:
 		print(f"saved_plot={hist_path}")
 		print(f"saved_plot={xy_path}")
 
+	csv_path: Path | None = None
+	if SAVE_CSV_PATH:
+		csv_path = Path(SAVE_CSV_PATH)
+	elif SAVE_PLOT_PATH:
+		save_path = Path(SAVE_PLOT_PATH)
+		csv_path = save_path.with_name(f"{save_path.stem}_results.csv")
+
+	if csv_path is not None:
+		csv_path.parent.mkdir(parents=True, exist_ok=True)
+		with csv_path.open("w", newline="", encoding="utf-8") as f:
+			writer = csv.DictWriter(
+				f,
+				fieldnames=["seed", "status", "move_count", "expanded_nodes", "error"],
+			)
+			writer.writeheader()
+			writer.writerows(rows)
+		print(f"saved_csv={csv_path}")
+
 	plt.show()
-
-
 if __name__ == "__main__":
 	run()
