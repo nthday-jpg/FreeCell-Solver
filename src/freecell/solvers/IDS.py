@@ -33,8 +33,9 @@ class IDSSolver(BaseSolver):
                 elapsed_seconds=perf_counter() - started,
             )
 
-        expanded_nodes = [0]
+        total_expanded_nodes = 0
         for depth_limit in self._iter_depth_limits():
+            expanded_nodes_this_pass = [0]
             best_depth: dict[StateKey, int] = {}
             path_keys: set[StateKey] = set()
             parents: dict[PackedState, PackedState | None] = {initial_state: None}
@@ -47,26 +48,25 @@ class IDSSolver(BaseSolver):
                 path_keys=path_keys,
                 best_depth=best_depth,
                 prev_move=None,
-                expanded_nodes=expanded_nodes,
+                expanded_nodes=expanded_nodes_this_pass,
                 parents=parents,
                 parent_moves=parent_moves,
             )
+
+            total_expanded_nodes += expanded_nodes_this_pass[0]
 
             if goal_state is not None:
                 return self.build_result(
                     solved=True,
                     moves=self._reconstruct_moves(goal_state, parents, parent_moves),
-                    expanded_nodes=expanded_nodes[0],
+                    expanded_nodes=total_expanded_nodes,
                     elapsed_seconds=perf_counter() - started,
                 )
-
-            if self.max_expansions is not None and expanded_nodes[0] >= self.max_expansions:
-                break
 
         return self.build_result(
             solved=False,
             moves=(),
-            expanded_nodes=expanded_nodes[0],
+            expanded_nodes=total_expanded_nodes,
             elapsed_seconds=perf_counter() - started,
         )
 
