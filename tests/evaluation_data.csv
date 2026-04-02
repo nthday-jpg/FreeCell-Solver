@@ -1,0 +1,6 @@
+Algorithm,SolveRate(%),AvgSearchTime(s),AvgPeakMemory(MB),AvgExpandedNodes,AvgSearchLength(moves)
+BFS,0.0,8.3390,16.66,10000.0,0.0
+IDS,0.0,10.5371,4.33,10000.0,0.0
+DFS,0.0,9.9280,0.43,10000.0,0.0
+UCS,0.0,23.9309,29.18,10000.0,0.0
+A*,100.0,17.8656,15.59,2438.0,97.0

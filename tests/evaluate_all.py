@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
 from freecell.core import GameState, deal_cascades
 from freecell.solvers.BFS import BFSSolver
 from freecell.solvers.IDS import IDSSolver
+from freecell.solvers.DFS import DFSSolver
 from freecell.solvers.UCS import UCSSolver
 from freecell.solvers.Astar import AstarSolver
 
@@ -154,7 +155,8 @@ def main():
     
     data = {}
     data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
-    # data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    data["DFS"] = evaluate_solver(DFSSolver, "DFS", seeds, max_expansions)
     data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
     data["A*"] = evaluate_solver(AstarSolver, "A*", seeds, max_expansions)
     

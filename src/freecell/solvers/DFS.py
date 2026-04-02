@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import sys
 from time import perf_counter
 
 from .base import BaseSolver, RawMove, SolveResult
 from ..core import PackedState
+
+sys.setrecursionlimit(10000)
 
 
 class DFSSolver(BaseSolver):
@@ -11,6 +14,7 @@ class DFSSolver(BaseSolver):
 		self.max_expansions = max_expansions
 
 	def solve(self, initial_state: PackedState) -> SolveResult:
+		started = perf_counter()
 		results = self.solve_k(initial_state, k=1)
 		if results:
 			return results[0]
@@ -18,11 +22,11 @@ class DFSSolver(BaseSolver):
 		return self.build_result(
 			solved=False,
 			moves=(),
-			expanded_nodes=0,
-			elapsed_seconds=0.0,
+			expanded_nodes=getattr(self, '_last_expanded_nodes', 0),
+			elapsed_seconds=perf_counter() - started,
 		)
 
-	def solve_k(self, initial_state: PackedState, k: int = 1) -> tuple[SolveResult, ...]:
+	def solve_k(self, initial_state: PackedState, k: int = 1, prune_suboptimal: bool = False) -> tuple[SolveResult, ...]:
 		if k <= 0:
 			raise ValueError("k must be a positive integer")
 
@@ -57,12 +61,14 @@ class DFSSolver(BaseSolver):
 			known_depth = best_depth.get(key)
 			if known_depth is not None and depth >= known_depth:
 				return
+			
+			if key not in best_depth and len(best_depth) >= 100_000:
+				del best_depth[next(iter(best_depth))]
 			best_depth[key] = depth
 
-			expanded_nodes += 1
-
 			if self.is_goal(state):
-				best_move_count = depth
+				if prune_suboptimal:
+					best_move_count = depth
 				solutions.append(
 					self.build_result(
 						solved=True,
@@ -77,6 +83,7 @@ class DFSSolver(BaseSolver):
 
 			path_keys.add(key)
 			try:
+				expanded_nodes += 1
 				for move in self.iter_legal_moves(state):
 					if stop_search:
 						break
@@ -95,4 +102,5 @@ class DFSSolver(BaseSolver):
 
 		dfs(initial_state, prev_move=None, depth=0)
 
+		self._last_expanded_nodes = expanded_nodes
 		return tuple(solutions)
