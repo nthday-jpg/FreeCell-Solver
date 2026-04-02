@@ -3,8 +3,41 @@ from ..core.move_engine import CASCADE, FREECELL, FOUNDATION
 from .base import RawMove
 from ..core import PackedState
 from ..core.rules import is_descending_alternating_codes
+from collections.abc import Callable, Sequence
+
+HeuristicFn = Callable[[PackedState], float]
+HeuristicSpec = tuple[HeuristicFn, float]
+StepCostFn = Callable[[RawMove, PackedState], int]
+
 
 class AstarSolver(BestFSSolver):
+    def __init__(
+        self,
+        heuristics: Sequence[HeuristicSpec] | None = None,
+        *,
+        step_cost_fn: StepCostFn | None = None,
+        max_expansions: int | None = None,
+    ):
+        super().__init__(max_expansions=max_expansions)
+
+        default_heuristics: tuple[HeuristicSpec, ...] = (
+            (self.h_cards_remaining, 1),
+            (self.h_occupied_freecells, 1.5),
+            (self.h_disorder, 1.5),
+        )
+        specs = tuple(heuristics) if heuristics is not None else default_heuristics
+        if not specs:
+            raise ValueError("heuristics must contain at least one (callable, weight) pair")
+
+        normalized: list[HeuristicSpec] = []
+        for heuristic_fn, weight in specs:
+            if not callable(heuristic_fn):
+                raise TypeError("heuristic must be callable")
+            normalized.append((heuristic_fn, float(weight)))
+
+        self._heuristics = tuple(normalized)
+        self._step_cost_fn = step_cost_fn or self._default_step_cost
+
     def evaluate(
         self, 
         parent_g: int, 
@@ -16,7 +49,16 @@ class AstarSolver(BestFSSolver):
         g: number of moves taken from start.
         h: estimated moves to goal.
         """
-        # 1. Calculate the 'Step Cost' (Weight)
+        step_cost = 0 if move is None else self._step_cost_fn(move, state)
+        if step_cost < 0:
+            raise ValueError("step_cost_fn must return a non-negative integer")
+
+        new_g = parent_g + step_cost
+        h = self._combined_heuristic(state)
+        return (new_g + h, step_cost)
+    @staticmethod
+    def _default_step_cost(move: RawMove, state: PackedState) -> int:
+        # Keep default move-cost preference consistent with previous behavior.
         weight = 1
         if move:
             # Move format: (src, src_idx, dst, dst_idx, count)
@@ -38,16 +80,22 @@ class AstarSolver(BestFSSolver):
             # Move multiple cards to structure the cascade is good
             if src == CASCADE and dst == CASCADE and count > 1:
                 weight = max(1, weight - 1)
-        new_g = parent_g + weight
-        # 1. Higher foundation count reduces cost
-        remain_cards = state.cards_remaining()
-        # 2. Empty freecells are good for mobility
-        empty_freecells = state.freecell_count_empty()
-        occupied_FC = state.freecell_slot_count - empty_freecells
-        disorder = self._calculate_disorder(state)
-        h = remain_cards + occupied_FC + disorder
-        return (new_g + h*1.5, weight)
+        return weight
 
+    def _combined_heuristic(self, state: PackedState) -> float:
+        return sum(weight * heuristic_fn(state) for heuristic_fn, weight in self._heuristics)
+
+    @staticmethod
+    def h_cards_remaining(state: PackedState) -> float:
+        return float(state.cards_remaining())
+
+    @staticmethod
+    def h_occupied_freecells(state: PackedState) -> float:
+        empty_freecells = state.freecell_count_empty()
+        return float(state.freecell_slot_count - empty_freecells)
+
+    def h_disorder(self, state: PackedState) -> float:
+        return float(self._calculate_disorder(state))
 
     def _calculate_disorder(self, state: PackedState) -> int:
         total_disorder = 0
