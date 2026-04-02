@@ -8,6 +8,9 @@ from ..core import PackedState, Move
 
 
 class BFSSolver(BaseSolver):
+    def __init__(self, max_expansions: int | None = None):
+        super().__init__()
+        self.max_expansions = max_expansions
 
     def solve(self, initial_state: PackedState) -> SolveResult:
         started = perf_counter()
@@ -30,6 +33,8 @@ class BFSSolver(BaseSolver):
 
             state = queue.popleft()
             expanded_nodes += 1
+            if self.max_expansions is not None and expanded_nodes >= self.max_expansions:
+                break
             
             for move in self.iter_legal_moves(state):
                 next_state = self.transition(state, move, validate=False)
