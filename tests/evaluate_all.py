@@ -87,7 +87,7 @@ def plot_results(data: dict, seeds: list[int], max_expansions: int):
     fig, axs = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle(f"Algorithm Comparison ({len(seeds)} Seeds | Max Nodes: {max_expansions})", fontsize=16)
     
-    colors = ['#c23b22', '#f39c12', '#2ecc71']
+    colors = ['#03045E', '#023E8A', '#0077B6', '#0096C7', '#48CAE4']
 
     # 1. Avg Time
     axs[0, 0].bar(solvers, avg_times, color=colors)
