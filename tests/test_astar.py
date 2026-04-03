@@ -12,6 +12,64 @@ if str(SRC_DIR) not in sys.path:
 from freecell.core import GameState, deal_cascades
 from freecell.solvers.Astar import AstarSolver
 
+# Duplicate A* heuristics for direct testing in this script
+from freecell.core.card import SUIT_TO_INDEX, SUITS, Card, card_to_code
+from freecell.core.rules import is_descending_alternating_codes
+
+# Note: in tests we already use solver._combined_heuristic, but we add functions here as requested.
+
+def h_cards_remaining(state):
+    return float(state.cards_remaining())
+
+
+def h_occupied_freecells(state):
+    empty_freecells = state.freecell_count_empty()
+    return float(state.freecell_slot_count - empty_freecells)
+
+
+def h_disorder(state):
+    total_disorder = 0
+    for c_idx in range(state.cascade_count):
+        length = state.cascade_length(c_idx)
+        if length <= 1:
+            continue
+        cards = state.cascade_tail_codes(c_idx, length)
+        for i in range(length - 1):
+            if not is_descending_alternating_codes(cards[i : i+2]):
+                total_disorder += (length - i - 1)
+                break
+    return float(total_disorder)
+
+
+def h_suit_blocking(state):
+    targets_set = set()
+    for suit in SUITS:
+        suit_idx = SUIT_TO_INDEX[suit]
+        current_rank = state.foundation_rank(suit_idx)
+        if current_rank < 13:
+            next_rank = current_rank + 1
+            target_card = Card(next_rank, suit)
+            targets_set.add(card_to_code(target_card))
+
+    extra_moves = 0
+    for c_idx in range(state.cascade_count):
+        length = state.cascade_length(c_idx)
+        for pos in range(length):
+            card_code = state.cascade_card_code(c_idx, pos)
+            if card_code in targets_set:
+                if pos == length - 1:
+                    break
+                blocker_codes = [state.cascade_card_code(c_idx, i) for i in range(pos + 1, length)]
+                num_blocks = 1
+                for i in range(len(blocker_codes) - 1):
+                    if not is_descending_alternating_codes(blocker_codes[i:i+2]):
+                        num_blocks += 1
+                extra_moves += num_blocks
+                break
+    return float(extra_moves)
+
+
+
 def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expansions: int):
     results = {
         "solved": 0,
@@ -23,12 +81,14 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
     print(f"\n[{solver_name}] Testing {len(seeds)} problems (Limits: {max_expansions} expansions)")
     
     for s in seeds:
+
         print(f"  -> seed={s:02d} | ", end="", flush=True)
         init = GameState(deal_cascades(s)).to_packed()
         
         solver = solver_class()
         h_init = solver._combined_heuristic(init) if hasattr(solver, "_combined_heuristic") else 0.0
-        
+        weight = solver.heuristic_weight if hasattr(solver, "heuristic_weight") else 1.0
+        print(f"h(init)={h_init:.2f} (weight={weight}) | ", end="", flush=True)        
         if hasattr(solver, "max_expansions"):
             solver.max_expansions = max_expansions
         # Use timed_solve to capture peak memory via tracemalloc
@@ -86,7 +146,26 @@ def main():
     print("=" * 60)
     
     data = {}
-    data["A*"] = evaluate_solver(lambda: AstarSolver(heuristic_weight=1.5), "A*", seeds, max_expansions)
+    # Admissible heuristics
+    data["A* Admissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+                                                                             (h_suit_blocking, 1.0)]), 
+                                             "A* Admissible 1", seeds, max_expansions)
+    
+    data["A* Admissible 2"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+                                                                             (h_suit_blocking, 2.0)]), 
+                                             "A* Admissible 2", seeds, max_expansions)
+    
+    # Inadmissible heuristics
+    data["A* Inadmissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+                                                                                (h_occupied_freecells, 1.0),
+                                                                                (h_disorder, 1.0)]), 
+                                                "A* Inadmissible 1", seeds, max_expansions)
+    
+    data["A* Inadmissible 2"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+                                                                                (h_occupied_freecells, 1.0),
+                                                                                (h_disorder, 1.0)], 
+                                                                   heuristic_weight=2.0), 
+                                                "A* Inadmissible 2", seeds, max_expansions)
     
     plot_results(data, seeds, max_expansions)
 
