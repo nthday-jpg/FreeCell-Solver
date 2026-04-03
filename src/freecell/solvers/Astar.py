@@ -19,13 +19,16 @@ class AstarSolver(BestFSSolver):
         *,
         step_cost_fn: StepCostFn | None = None,
         max_expansions: int | None = None,
+        heuristic_weight: float = 1.0,
     ):
         super().__init__(max_expansions=max_expansions)
+        self.heuristic_weight = heuristic_weight
 
         default_heuristics: tuple[HeuristicSpec, ...] = (
             (self.h_cards_remaining, 1),
-            (self.h_occupied_freecells, 1.5),
-            (self.h_disorder, 1.5),
+            (self.h_occupied_freecells, 1),
+            (self.h_disorder, 1),
+            (self.h_suit_blocking, 1)
         )
         specs = tuple(heuristics) if heuristics is not None else default_heuristics
         if not specs:
@@ -47,8 +50,9 @@ class AstarSolver(BestFSSolver):
         state: PackedState,
     ) -> tuple[float, int]:
         """
-        Calculates f(n) = g(n) + h(n).
+        Calculates f(n) = g(n) + W * h(n).
         g: number of moves taken from start.
+        W: heuristic weight.
         h: estimated moves to goal.
         """
         step_cost = 0 if move is None else self._step_cost_fn(move, state)
@@ -57,7 +61,8 @@ class AstarSolver(BestFSSolver):
 
         new_g = parent_g + step_cost
         h = self._combined_heuristic(state)
-        return (new_g + h, step_cost)
+        return (new_g + self.heuristic_weight * h, step_cost)
+
     @staticmethod
     def _default_step_cost(move: RawMove, state: PackedState) -> int:
         # Keep default move-cost preference consistent with previous behavior.
@@ -66,7 +71,7 @@ class AstarSolver(BestFSSolver):
             # Move format: (src, src_idx, dst, dst_idx, count)
             src, src_idx, dst, dst_idx, count = move
             if dst == FOUNDATION:
-                weight = 0 # Highly encouraged
+                weight = 1 # Encouraged
             elif dst == FREECELL:
                 weight = 4 # Discouraged (resource consumption)
             elif dst == CASCADE:
@@ -85,7 +90,8 @@ class AstarSolver(BestFSSolver):
         return weight
 
     def _combined_heuristic(self, state: PackedState) -> float:
-        return sum(weight * heuristic_fn(state) for heuristic_fn, weight in self._heuristics)
+        # sum_spec_weights = sum(weight for _, weight in self._heuristics)
+        return sum(weight * heuristic_fn(state) for heuristic_fn, weight in self._heuristics) #/ sum_spec_weights
 
     @staticmethod
     def h_cards_remaining(state: PackedState) -> float:
@@ -112,37 +118,45 @@ class AstarSolver(BestFSSolver):
                 target_card = Card(next_rank, suit)
                 targets_set.add(card_to_code(target_card))
         
-        extra_moves = 0
+        # extra_moves = 0
         
-        # Iterate through each cascade (tableau column)
+        # # Iterate through each cascade (tableau column)
+        # for c_idx in range(state.cascade_count):
+        #     length = state.cascade_length(c_idx)
+        #     found_target_in_column = False
+            
+        #     # Look for a target card in this column
+        #     for pos in range(length):
+        #         card_code = state.cascade_card_code(c_idx, pos)
+                
+        #         # If this card is a target the foundation needs...
+        #         if card_code in targets_set:
+        #             # Count how many cards are ON TOP of this target card
+        #             # Cards on top are those at positions pos+1, pos+2, ..., length-1
+        #             cards_on_top = length - pos - 1
+                    
+        #             # For each card on top, check if it's a blocker
+        #             for top_pos in range(pos + 1, length):
+        #                 blocker_code = state.cascade_card_code(c_idx, top_pos)
+                        
+        #                 # If the blocker card itself isn't a foundation target,
+        #                 # it MUST be moved to get the target card exposed
+        #                 if blocker_code not in targets_set:
+        #                     extra_moves += 1
+                    
+        #             # We've found and processed a target in this column
+        #             found_target_in_column = True
+        #             break
+        
+        # return float(extra_moves)
+        blocked_targets = 0
         for c_idx in range(state.cascade_count):
             length = state.cascade_length(c_idx)
-            found_target_in_column = False
-            
-            # Look for a target card in this column
-            for pos in range(length):
-                card_code = state.cascade_card_code(c_idx, pos)
-                
-                # If this card is a target the foundation needs...
-                if card_code in targets_set:
-                    # Count how many cards are ON TOP of this target card
-                    # Cards on top are those at positions pos+1, pos+2, ..., length-1
-                    cards_on_top = length - pos - 1
+            for pos in range(length - 1):
+                if state.cascade_card_code(c_idx, pos) in targets_set:
+                    blocked_targets += 1
                     
-                    # For each card on top, check if it's a blocker
-                    for top_pos in range(pos + 1, length):
-                        blocker_code = state.cascade_card_code(c_idx, top_pos)
-                        
-                        # If the blocker card itself isn't a foundation target,
-                        # it MUST be moved to get the target card exposed
-                        if blocker_code not in targets_set:
-                            extra_moves += 1
-                    
-                    # We've found and processed a target in this column
-                    found_target_in_column = True
-                    break
-        
-        return float(extra_moves)
+        return float(blocked_targets)
 
     def _calculate_disorder(self, state: PackedState) -> int:
         total_disorder = 0

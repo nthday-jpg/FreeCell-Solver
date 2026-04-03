@@ -10,9 +10,6 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from freecell.core import GameState, deal_cascades
-from freecell.solvers.BFS import BFSSolver
-from freecell.solvers.IDS import IDSSolver
-from freecell.solvers.UCS import UCSSolver
 from freecell.solvers.Astar import AstarSolver
 
 def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expansions: int):
@@ -30,6 +27,8 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
         init = GameState(deal_cascades(s)).to_packed()
         
         solver = solver_class()
+        h_init = solver._combined_heuristic(init) if hasattr(solver, "_combined_heuristic") else 0.0
+        
         if hasattr(solver, "max_expansions"):
             solver.max_expansions = max_expansions
         # Use timed_solve to capture peak memory via tracemalloc
@@ -44,9 +43,9 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
         if res.solved:
             results["solved"] += 1
             results["move_counts"].append(res.move_count)
-            print(f"SOLVED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \tmoves={res.move_count}")
+            print(f"SOLVED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \tmoves={res.move_count} \th(init)={h_init:.2f}")
         else:
-            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB (Hit Limit)")
+            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \th(init)={h_init:.2f} (Hit Limit)")
             
     return results
 
@@ -87,10 +86,7 @@ def main():
     print("=" * 60)
     
     data = {}
-    # data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
-    # # data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
-    # data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
-    data["A*"] = evaluate_solver(AstarSolver, "A*", seeds, max_expansions)
+    data["A*"] = evaluate_solver(lambda: AstarSolver(heuristic_weight=1.5), "A*", seeds, max_expansions)
     
     plot_results(data, seeds, max_expansions)
 

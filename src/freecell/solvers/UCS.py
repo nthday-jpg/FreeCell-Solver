@@ -24,7 +24,7 @@ class UCSSolver(BestFSSolver):
             # Move format: (src, src_idx, dst, dst_idx, count)
             src, src_idx, dst, dst_idx, count = move
             if dst == FOUNDATION:
-                weight = 0 # Highly encouraged
+                weight = 1 # Encouraged
             elif dst == FREECELL:
                 weight = 4 # Discouraged (resource consumption)
             elif dst == CASCADE:
