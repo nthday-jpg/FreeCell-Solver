@@ -32,7 +32,11 @@ class BFSSolver(BaseSolver):
             if self.max_expansions is not None and expanded_nodes >= self.max_expansions:
                 break
             
+            prev_move = parent_moves.get(state)
             for move in self.iter_legal_moves(state):
+                if prev_move is not None and self._is_reversal(prev_move, move):
+                    continue
+
                 next_state = self.transition(state, move, validate=False)
                 next_key = next_state.canonical_key()
                 if next_key in visited:
