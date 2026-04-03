@@ -42,6 +42,9 @@ class SolveResult:
 		)
 
 class BaseSolver(ABC):
+	def __init__(self, max_expansions: int | None = None):
+		self.max_expansions = max_expansions
+
 	@abstractmethod
 	def solve(self, initial_state: PackedState) -> SolveResult:
 		"""

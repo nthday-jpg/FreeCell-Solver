@@ -7,8 +7,6 @@ from .base import BaseSolver, SolveResult, RawMove
 from ..core import PackedState
 
 class BestFSSolver(BaseSolver):
-    def __init__(self, max_expansions: int | None = None):
-        self.max_expansions = max_expansions
     @abstractmethod
     def evaluate(
         self, 
