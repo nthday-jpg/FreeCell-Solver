@@ -25,10 +25,10 @@ class AstarSolver(BestFSSolver):
         self.heuristic_weight = heuristic_weight
 
         default_heuristics: tuple[HeuristicSpec, ...] = (
-            (self.h_cards_remaining, 1),
-            (self.h_occupied_freecells, 1),
-            (self.h_disorder, 1),
-            (self.h_suit_blocking, 1)
+            (self.h_cards_remaining, 1.5),
+            (self.h_occupied_freecells, 1.5),
+            (self.h_disorder, 1.5),
+           
         )
         specs = tuple(heuristics) if heuristics is not None else default_heuristics
         if not specs:
@@ -101,7 +101,10 @@ class AstarSolver(BestFSSolver):
     def h_occupied_freecells(state: PackedState) -> float:
         empty_freecells = state.freecell_count_empty()
         return float(state.freecell_slot_count - empty_freecells)
-
+    
+    def h_empty_columns(self, state: PackedState) -> float:
+        return float(state.cascade_count_empty())
+    
     def h_disorder(self, state: PackedState) -> float:
         return float(self._calculate_disorder(state))
 
@@ -118,45 +121,55 @@ class AstarSolver(BestFSSolver):
                 target_card = Card(next_rank, suit)
                 targets_set.add(card_to_code(target_card))
         
-        # extra_moves = 0
-        
-        # # Iterate through each cascade (tableau column)
-        # for c_idx in range(state.cascade_count):
-        #     length = state.cascade_length(c_idx)
-        #     found_target_in_column = False
-            
-        #     # Look for a target card in this column
-        #     for pos in range(length):
-        #         card_code = state.cascade_card_code(c_idx, pos)
-                
-        #         # If this card is a target the foundation needs...
-        #         if card_code in targets_set:
-        #             # Count how many cards are ON TOP of this target card
-        #             # Cards on top are those at positions pos+1, pos+2, ..., length-1
-        #             cards_on_top = length - pos - 1
-                    
-        #             # For each card on top, check if it's a blocker
-        #             for top_pos in range(pos + 1, length):
-        #                 blocker_code = state.cascade_card_code(c_idx, top_pos)
-                        
-        #                 # If the blocker card itself isn't a foundation target,
-        #                 # it MUST be moved to get the target card exposed
-        #                 if blocker_code not in targets_set:
-        #                     extra_moves += 1
-                    
-        #             # We've found and processed a target in this column
-        #             found_target_in_column = True
-        #             break
-        
-        # return float(extra_moves)
-        blocked_targets = 0
+        extra_moves = 0
         for c_idx in range(state.cascade_count):
             length = state.cascade_length(c_idx)
-            for pos in range(length - 1):
-                if state.cascade_card_code(c_idx, pos) in targets_set:
-                    blocked_targets += 1
+            for pos in range(length):
+                card_code = state.cascade_card_code(c_idx, pos)
+                
+                if card_code in targets_set:
+                    if pos == length - 1:
+                        break # Target is already exposed
                     
-        return float(blocked_targets)
+                    # Get the codes of all cards sitting ON TOP of the target
+                    blocker_codes = [state.cascade_card_code(c_idx, i) 
+                                    for i in range(pos + 1, length)]
+                    
+                    num_blocks = 1
+                    for i in range(len(blocker_codes) - 1):
+                        # If the next card doesn't follow the rule, it starts a NEW block
+                        if not is_descending_alternating_codes(blocker_codes[i:i+2]):
+                            num_blocks += 1
+                    
+                    extra_moves += num_blocks
+                    break 
+        
+        return float(extra_moves)
+
+    def h_next_to_foundation(self, state: PackedState) -> float:
+        from ..core.card import SUITS, SUIT_TO_INDEX, Card, card_to_code
+
+        # Next needed cards for each suit
+        targets = set()
+        for suit in SUITS:
+            suit_idx = SUIT_TO_INDEX[suit]
+            current_rank = state.foundation_rank(suit_idx)
+            if current_rank < 13:
+                next_rank = current_rank + 1
+                targets.add(card_to_code(Card(next_rank, suit)))
+
+        # Check if any target is already movable to foundation from cascade tops or freecell
+        for c_idx in range(state.cascade_count):
+            length = state.cascade_length(c_idx)
+            if length > 0 and state.cascade_card_code(c_idx, length - 1) in targets:
+                return -100.0
+
+        for fc_idx in range(state.freecell_slot_count):
+            fc_code = state.freecell(fc_idx)
+            if fc_code != 63 and fc_code in targets:
+                return -100.0
+
+        return 0.0
 
     def _calculate_disorder(self, state: PackedState) -> int:
         total_disorder = 0
