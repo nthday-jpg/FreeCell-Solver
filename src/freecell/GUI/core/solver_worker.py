@@ -9,6 +9,7 @@ from time import perf_counter
 from freecell.core import Move, PackedState
 from freecell.solvers.Astar import AstarSolver
 from freecell.solvers.BFS import BFSSolver
+from freecell.solvers.IDS import IDSSolver
 from freecell.solvers.UCS import UCSSolver
 
 
@@ -22,8 +23,12 @@ def _solve_target(
     name = solver_name.upper()
     if name == "BFS":
         solver = BFSSolver()
+    elif name == "IDS":
+        solver = IDSSolver(max_expansions=max_expansions)
     elif name in ("ASTAR", "A*"):
         solver = AstarSolver(max_expansions=max_expansions)
+    elif name == "UCS":
+        solver = UCSSolver(max_expansions=max_expansions)
     else:
         solver = UCSSolver(max_expansions=max_expansions)
 

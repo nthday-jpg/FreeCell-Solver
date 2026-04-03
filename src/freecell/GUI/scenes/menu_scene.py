@@ -17,6 +17,8 @@ class MenuScene(BaseScene):
         center_x = self.screen.get_rect().centerx
         button_width = 260
         button_height = 52
+        gap = 28
+        start_y = 270
         
         def make_rect(y_pos: int) -> pygame.Rect:
             rect = pygame.Rect(0, 0, button_width, button_height)
@@ -25,11 +27,9 @@ class MenuScene(BaseScene):
             return rect
 
         defs = [
-            # TODO: add more options like "Resume Game" if there's a saved session
-            # Modify the spacing for aesthetic
-            ("Play Game", make_rect(260)),
-            ("Settings", make_rect(396)),
-            ("Quit", make_rect(464)),
+            ("Play Game", make_rect(start_y)),
+            ("Settings", make_rect(start_y + (button_height + gap))),
+            ("Quit", make_rect(start_y + 2 * (button_height + gap))),
         ]
         return draw_buttons(self.screen, self.assets.body_font, defs, events)
 

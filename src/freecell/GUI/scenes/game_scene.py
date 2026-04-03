@@ -1,7 +1,7 @@
 import pygame
 from freecell.GUI.scenes.base_scene import BaseScene
 from freecell.GUI.core.constants import BG_COLOR, TEXT_COLOR, ERROR_COLOR, SUCCESS_COLOR, WARN_COLOR, SOLVER_MAX_EXPANSIONS, WINDOW_SIZE, BUTTON_BG, CASCADE_OFFSET
-from freecell.GUI.ui.components import draw_buttons, draw_card
+from freecell.GUI.ui.components import draw_buttons, draw_card, draw_dropdown
 from freecell.GUI.core.session import GameSession
 from freecell.GUI.core.solver_worker import SolverWorker
 from freecell.core import Move, Card
@@ -21,7 +21,8 @@ class GameScene(BaseScene):
         self.solver_solution: tuple[Move, ...] = ()
         self.solver_solution_index = 0
         self.show_solver_popup = False
-        self.solver_choices = ["BFS", "DFS", "UCS", "A*"]
+        self.solver_choices = ["BFS", "UCS", "IDS", "A*"]
+        self.solver_dropdown_expanded = False
         try:
             self.solver_choice_index = self.solver_choices.index(self.settings.preferred_solver)
         except Exception:
@@ -114,6 +115,8 @@ class GameScene(BaseScene):
             self.solver_solution = ()
             self.solver_solution_index = 0
             self.solver_worker.stop()
+            # If user restarted after winning (win music is playing), switch back.
+            self.audio.play_music("game")
             self._set_message("Game restarted.")
             return
         if button == "Undo":
@@ -172,6 +175,12 @@ class GameScene(BaseScene):
             f"Applied solver step {self.solver_solution_index}/{len(self.solver_solution)}.",
             SUCCESS_COLOR,
         )
+
+        # If the solver step completes the game, play win music as well.
+        if self.session.state.is_victory:
+            self.audio.play_music("win")
+            self._set_message("Congratulations! You won!", SUCCESS_COLOR)
+
         return True
 
     def _handle_mouse_down(self, mouse_pos: tuple[int, int]) -> None:
@@ -285,14 +294,18 @@ class GameScene(BaseScene):
             self._set_message("Congratulations! You won!", SUCCESS_COLOR)
 
     def _game_buttons(self, events: list[pygame.event.Event]) -> str | None:
+        button_width = 120
+        button_height = 40
+        start_x = 40
+        gap = 15
+        y = 18
+        labels = ["Menu", "Restart", "Undo", "Redo", "Solver", "Next Step", "Auto Run"]
         defs = [
-            ("Menu", pygame.Rect(40, 18, 120, 40)),
-            ("Restart", pygame.Rect(175, 18, 120, 40)),
-            ("Undo", pygame.Rect(310, 18, 120, 40)),
-            ("Redo", pygame.Rect(445, 18, 120, 40)),
-            ("Solver", pygame.Rect(580, 18, 120, 40)), # choose BFS, DFS, A*, UCS
-            ("Next Step", pygame.Rect(715, 18, 120, 40)), # step through solver solution
-            ("Auto Run", pygame.Rect(850, 18, 120, 40)) # Disable manual card move.
+            (
+                label,
+                pygame.Rect(start_x + idx * (button_width + gap), y, button_width, button_height),
+            )
+            for idx, label in enumerate(labels)
         ]
         return draw_buttons(self.screen, self.assets.body_font, defs, events)
 
@@ -306,26 +319,53 @@ class GameScene(BaseScene):
         solve_rect = pygame.Rect(popup_rect.x + 60, popup_rect.y + 110, 100, 36)
         quit_rect = pygame.Rect(popup_rect.x + 200, popup_rect.y + 110, 100, 36)
 
-        # handle dropdown click (cycle options)
+        clicked_pos: tuple[int, int] | None = None
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if dropdown_rect.collidepoint(event.pos):
-                    self.solver_choice_index = (self.solver_choice_index + 1) % len(self.solver_choices)
-                    return
+                clicked_pos = event.pos
+                break
 
-        # handle popup buttons
-        defs = [("Solve", solve_rect), ("Quit", quit_rect)]
-        clicked = draw_buttons(self.screen, self.assets.body_font, defs, events)
-        if clicked == "Solve":
+        if clicked_pos is None:
+            return
+
+        # Dropdown toggle.
+        if dropdown_rect.collidepoint(clicked_pos):
+            self.solver_dropdown_expanded = not self.solver_dropdown_expanded
+            return
+
+        # While expanded: only pick an option or close; do not treat Solve/Quit.
+        if self.solver_dropdown_expanded:
+            for idx, _option in enumerate(self.solver_choices):
+                opt_rect = pygame.Rect(
+                    dropdown_rect.x,
+                    dropdown_rect.bottom + 4 + idx * (dropdown_rect.height + 4),
+                    dropdown_rect.width,
+                    dropdown_rect.height,
+                )
+                if opt_rect.collidepoint(clicked_pos):
+                    self.solver_choice_index = idx
+                    self.settings.preferred_solver = self.solver_choices[self.solver_choice_index]
+                    self.solver_dropdown_expanded = False
+                    return
+            self.solver_dropdown_expanded = False
+            return
+
+        # Collapsed: Solve / Quit only.
+        if solve_rect.collidepoint(clicked_pos):
             solver_name = self.solver_choices[self.solver_choice_index]
             self.settings.preferred_solver = solver_name
             self.solver_worker.start(self.session.state.to_packed(), solver_name, SOLVER_MAX_EXPANSIONS)
             self.show_solver_popup = False
+            self.solver_dropdown_expanded = False
             self._set_message(f"Started solver: {solver_name}.")
-        elif clicked == "Quit":
+            return
+
+        if quit_rect.collidepoint(clicked_pos):
             self.solver_worker.stop()
             self.show_solver_popup = False
+            self.solver_dropdown_expanded = False
             self._set_message("Solver stopped.")
+            return
 
     def _render_solver_popup(self) -> None:
         center_x = self.screen.get_rect().centerx
@@ -343,17 +383,22 @@ class GameScene(BaseScene):
         self.screen.blit(title, title.get_rect(center=(center_x, popup_rect.y + 24)))
 
         dropdown_rect = pygame.Rect(popup_rect.x + 40, popup_rect.y + 50, popup_rect.width - 80, 40)
-        pygame.draw.rect(self.screen, (40, 40, 40), dropdown_rect, border_radius=6)
-        pygame.draw.rect(self.screen, (160, 160, 160), dropdown_rect, width=2, border_radius=6)
-        current = self.solver_choices[self.solver_choice_index]
-        label = self.assets.body_font.render(f"{current}  (click to change)", True, TEXT_COLOR)
-        self.screen.blit(label, (dropdown_rect.x + 8, dropdown_rect.y + 8))
+        self.solver_choice_index, self.solver_dropdown_expanded = draw_dropdown(
+            self.screen,
+            self.assets.body_font,
+            dropdown_rect,
+            self.solver_choices,
+            self.solver_choice_index,
+            [],
+            self.solver_dropdown_expanded,
+        )
 
-        # Draw buttons
-        solve_rect = pygame.Rect(popup_rect.x + 60, popup_rect.y + 110, 100, 36)
-        quit_rect = pygame.Rect(popup_rect.x + 200, popup_rect.y + 110, 100, 36)
-        defs = [("Solve", solve_rect), ("Quit", quit_rect)]
-        draw_buttons(self.screen, self.assets.body_font, defs, [])
+        # Solve / Quit only when dropdown is closed (after choosing algorithm).
+        if not self.solver_dropdown_expanded:
+            solve_rect = pygame.Rect(popup_rect.x + 60, popup_rect.y + 110, 100, 36)
+            quit_rect = pygame.Rect(popup_rect.x + 200, popup_rect.y + 110, 100, 36)
+            defs = [("Solve", solve_rect), ("Quit", quit_rect)]
+            draw_buttons(self.screen, self.assets.body_font, defs, [])
 
     def _board_targets(self) -> list[tuple[str, int, pygame.Rect]]:
         targets: list[tuple[str, int, pygame.Rect]] = []

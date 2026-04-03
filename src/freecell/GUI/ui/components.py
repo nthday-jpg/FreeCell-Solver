@@ -58,9 +58,59 @@ def draw_slider(screen: pygame.Surface, font: pygame.font.Font, label: str, valu
         rel_x = max(0, min(mouse_x - track_x, track_w))
         new_ratio = rel_x / track_w
         new_val = min_val + new_ratio * (max_val - min_val)
-        return type(value)(new_val)
+        if isinstance(value, int):
+            return int(round(new_val))
+        return float(new_val)
 
     return value
+
+
+def draw_dropdown(
+    screen: pygame.Surface,
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    options: list[str],
+    selected_index: int,
+    events: list[pygame.event.Event],
+    expanded: bool,
+) -> tuple[int, bool]:
+    clicked_pos: tuple[int, int] | None = None
+    for event in events:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            clicked_pos = event.pos
+            break
+
+    hovered = rect.collidepoint(pygame.mouse.get_pos())
+    pygame.draw.rect(screen, BUTTON_ACTIVE if hovered else BUTTON_BG, rect, border_radius=8)
+    pygame.draw.rect(screen, TEXT_COLOR, rect, width=2, border_radius=8)
+
+    label = options[selected_index] if options else ""
+    text = font.render(label, True, TEXT_COLOR)
+    screen.blit(text, text.get_rect(midleft=(rect.x + 12, rect.centery)))
+    arrow = font.render("v" if not expanded else "^", True, WARN_COLOR)
+    screen.blit(arrow, arrow.get_rect(midright=(rect.right - 10, rect.centery)))
+
+    new_index = selected_index
+    new_expanded = expanded
+    if clicked_pos is not None and rect.collidepoint(clicked_pos):
+        new_expanded = not expanded
+    elif clicked_pos is not None and expanded:
+        new_expanded = False
+
+    if new_expanded:
+        for idx, option in enumerate(options):
+            opt_rect = pygame.Rect(rect.x, rect.bottom + 4 + idx * (rect.height + 4), rect.width, rect.height)
+            opt_hovered = opt_rect.collidepoint(pygame.mouse.get_pos())
+            fill = BUTTON_ACTIVE if (idx == selected_index or opt_hovered) else BUTTON_BG
+            pygame.draw.rect(screen, fill, opt_rect, border_radius=8)
+            pygame.draw.rect(screen, TEXT_COLOR, opt_rect, width=2, border_radius=8)
+            opt_text = font.render(option, True, TEXT_COLOR)
+            screen.blit(opt_text, opt_text.get_rect(midleft=(opt_rect.x + 12, opt_rect.centery)))
+            if clicked_pos is not None and opt_rect.collidepoint(clicked_pos):
+                new_index = idx
+                new_expanded = False
+
+    return new_index, new_expanded
 
 def draw_card(screen: pygame.Surface, font: pygame.font.Font, assets: AssetManager, rect: pygame.Rect, label: str, color: tuple[int, int, int], selected: bool = False) -> None:
     if label in assets.card_images:
