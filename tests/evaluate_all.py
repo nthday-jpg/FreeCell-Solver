@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
 from freecell.core import GameState, deal_cascades
 from freecell.solvers.BFS import BFSSolver
 from freecell.solvers.IDS import IDSSolver
+from freecell.solvers.DFS import DFSSolver
 from freecell.solvers.UCS import UCSSolver
 from freecell.solvers.Astar import AstarSolver
 
@@ -86,7 +87,7 @@ def plot_results(data: dict, seeds: list[int], max_expansions: int):
     fig, axs = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle(f"Algorithm Comparison ({len(seeds)} Seeds | Max Nodes: {max_expansions})", fontsize=16)
     
-    colors = ['#c23b22', '#f39c12', '#2ecc71']
+    colors = ['#03045E', '#023E8A', '#0077B6', '#0096C7', '#48CAE4']
 
     # 1. Avg Time
     axs[0, 0].bar(solvers, avg_times, color=colors)
@@ -154,7 +155,8 @@ def main():
     
     data = {}
     data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
-    # data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    data["DFS"] = evaluate_solver(DFSSolver, "DFS", seeds, max_expansions)
     data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
     data["A*"] = evaluate_solver(AstarSolver, "A*", seeds, max_expansions)
     
