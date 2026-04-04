@@ -8,9 +8,8 @@ from freecell.core import Move, Card
 from freecell.core.card import SUITS
 
 class GameScene(BaseScene):
-    def __init__(self, screen, assets, audio, settings, change_scene, mode: str = "manual"):
+    def __init__(self, screen, assets, audio, settings, change_scene):
         super().__init__(screen, assets, audio, settings, change_scene)
-        self.mode = mode
         self.seed = 1
         self.session = GameSession.from_seed(self.seed)
         self.selected_source: tuple[str, int] | None = None
@@ -20,6 +19,7 @@ class GameScene(BaseScene):
         self.solver_worker = SolverWorker()
         self.solver_solution: tuple[Move, ...] = ()
         self.solver_solution_index = 0
+        self.solver_running = False
         self.show_solver_popup = False
         self.solver_choices = ["BFS", "UCS", "IDS", "A*"]
         self.solver_dropdown_expanded = False
@@ -35,25 +35,17 @@ class GameScene(BaseScene):
         self._auto_phase = ""
         self._auto_phase_end = 0.0
 
-        if self.mode == "solver":
-            self.solver_worker.start(
-                self.session.state.to_packed(),
-                self.settings.preferred_solver,
-                SOLVER_MAX_EXPANSIONS,
-            )
-
     def _set_message(self, text: str, color: tuple[int, int, int] = TEXT_COLOR) -> None:
         self.message = text
         self.message_color = color
 
-    def _poll_solver(self) -> None:
-        if self.mode != "solver":
-            return
-
+    def _poll_solver(self) -> None:        
         update = self.solver_worker.poll()
         if update.status == "running":
+            self.solver_running = True
             return
         if update.status == "done":
+            self.solver_running = False
             self.solver_solution = update.moves
             self.solver_solution_index = 0
             if update.solved:
@@ -66,9 +58,13 @@ class GameScene(BaseScene):
                     "No solution found within current limit.",
                     WARN_COLOR,
                 )
+            return
+        self.solver_running = False
 
     def handle_events(self, events: list[pygame.event.Event]) -> None:
-        self._poll_solver()
+        if self.solver_running:
+            self._poll_solver()
+
         button = self._game_buttons(events)
         if button == "Solver":
             # show solver popup to choose solver and start/quit
@@ -188,7 +184,8 @@ class GameScene(BaseScene):
             return
         if self.auto_run_solution:
             return
-            
+        if self.solver_running == True:
+            return
         targets = self._board_targets()
         target = next((item for item in targets if item[2].collidepoint(mouse_pos)), None)
 
@@ -252,6 +249,9 @@ class GameScene(BaseScene):
 
         if not self.is_dragging:
             return
+
+        if self.solver_running == True:
+            return     
 
         self.is_dragging = False
         targets = self._board_targets()
@@ -355,12 +355,10 @@ class GameScene(BaseScene):
             solver_name = self.solver_choices[self.solver_choice_index]
             self.settings.preferred_solver = solver_name
             self.solver_worker.start(self.session.state.to_packed(), solver_name, SOLVER_MAX_EXPANSIONS)
+            self.solver_running = True
             self.show_solver_popup = False
-            self.solver_dropdown_expanded = False
-            self._set_message(f"Started solver: {solver_name}.")
-            return
-
-        if quit_rect.collidepoint(clicked_pos):
+            self._set_message(f"Started solver: {solver_name}...")
+        elif clicked == "Quit":
             self.solver_worker.stop()
             self.show_solver_popup = False
             self.solver_dropdown_expanded = False
@@ -422,7 +420,7 @@ class GameScene(BaseScene):
         self._game_buttons([])
 
         header = self.assets.small_font.render(
-            f"Mode: {self.mode.upper()} | Moves {self.session.move_count} | Time {self.session.elapsed_seconds:.1f}s",
+            f"Moves {self.session.move_count} | Time {self.session.elapsed_seconds:.1f}s",
             True, TEXT_COLOR,
         )
         self.screen.blit(header, (40, 70))

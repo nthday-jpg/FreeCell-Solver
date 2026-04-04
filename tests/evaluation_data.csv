@@ -1,0 +1,2 @@
+Algorithm,SolveRate(%),AvgSearchTime(s),AvgPeakMemory(MB),AvgExpandedNodes,AvgSearchLength(moves)
+A*,90.0,35.2349,48.30,8810.8,91.9
