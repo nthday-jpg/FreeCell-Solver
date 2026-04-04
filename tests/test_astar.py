@@ -85,10 +85,7 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
         print(f"  -> seed={s:02d} | ", end="", flush=True)
         init = GameState(deal_cascades(s)).to_packed()
         
-        solver = solver_class()
-        h_init = solver._combined_heuristic(init) if hasattr(solver, "_combined_heuristic") else 0.0
-        weight = solver.heuristic_weight if hasattr(solver, "heuristic_weight") else 1.0
-        print(f"h(init)={h_init:.2f} (weight={weight}) | ", end="", flush=True)        
+        solver = solver_class()       
         if hasattr(solver, "max_expansions"):
             solver.max_expansions = max_expansions
         # Use timed_solve to capture peak memory via tracemalloc
@@ -103,9 +100,9 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
         if res.solved:
             results["solved"] += 1
             results["move_counts"].append(res.move_count)
-            print(f"SOLVED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \tmoves={res.move_count} \th(init)={h_init:.2f}")
+            print(f"SOLVED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \tmoves={res.move_count}")
         else:
-            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \th(init)={h_init:.2f} (Hit Limit)")
+            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \t(Hit Limit)")
             
     return results
 
@@ -147,24 +144,21 @@ def main():
     
     data = {}
     # Admissible heuristics
-    data["A* Admissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
-                                                                             (h_suit_blocking, 1.0)]), 
-                                             "A* Admissible 1", seeds, max_expansions)
+    # data["A* Admissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+    #                                                                          (h_suit_blocking, 1.0)]), 
+    #                                          "A* Admissible 1", seeds, max_expansions)
     
-    data["A* Admissible 2"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
-                                                                             (h_suit_blocking, 2.0)]), 
-                                             "A* Admissible 2", seeds, max_expansions)
+    # data["A* Admissible 2"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+    #                                                                          (h_suit_blocking, 2.0)]), 
+    #                                          "A* Admissible 2", seeds, max_expansions)
     
-    # Inadmissible heuristics
-    data["A* Inadmissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
-                                                                                (h_occupied_freecells, 1.0),
-                                                                                (h_disorder, 1.0)]), 
-                                                "A* Inadmissible 1", seeds, max_expansions)
+    # # Inadmissible heuristics
+    # data["A* Inadmissible 1"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
+    #                                                                             (h_occupied_freecells, 1.0),
+    #                                                                             (h_disorder, 1.0)]), 
+    #                                             "A* Inadmissible 1", seeds, max_expansions)
     
-    data["A* Inadmissible 2"] = evaluate_solver(lambda: AstarSolver(heuristics=[(h_cards_remaining, 1.0),
-                                                                                (h_occupied_freecells, 1.0),
-                                                                                (h_disorder, 1.0)], 
-                                                                   heuristic_weight=2.0), 
+    data["A* Inadmissible 2"] = evaluate_solver(lambda: AstarSolver(), 
                                                 "A* Inadmissible 2", seeds, max_expansions)
     
     plot_results(data, seeds, max_expansions)

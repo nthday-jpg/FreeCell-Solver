@@ -7,41 +7,14 @@ from ..core import PackedState
 from ..core.rules import is_descending_alternating_codes
 from collections.abc import Callable, Sequence
 
-HeuristicFn = Callable[[PackedState], float]
-HeuristicSpec = tuple[HeuristicFn, float]
-StepCostFn = Callable[[RawMove, PackedState], int]
-
-
 class AstarSolver(BestFSSolver):
     def __init__(
         self,
-        heuristics: Sequence[HeuristicSpec] | None = None,
-        *,
-        step_cost_fn: StepCostFn | None = None,
         max_expansions: int | None = None,
         heuristic_weight: float = 1.0,
     ):
         super().__init__(max_expansions=max_expansions)
         self.heuristic_weight = heuristic_weight
-
-        default_heuristics: tuple[HeuristicSpec, ...] = (
-            (self.h_cards_remaining, 1.5),
-            (self.h_occupied_freecells, 1.5),
-            (self.h_disorder, 1.5),
-           
-        )
-        specs = tuple(heuristics) if heuristics is not None else default_heuristics
-        if not specs:
-            raise ValueError("heuristics must contain at least one (callable, weight) pair")
-
-        normalized: list[HeuristicSpec] = []
-        for heuristic_fn, weight in specs:
-            if not callable(heuristic_fn):
-                raise TypeError("heuristic must be callable")
-            normalized.append((heuristic_fn, float(weight)))
-
-        self._heuristics = tuple(normalized)
-        self._step_cost_fn = step_cost_fn or self._default_step_cost
 
     def evaluate(
         self, 
@@ -55,13 +28,16 @@ class AstarSolver(BestFSSolver):
         W: heuristic weight.
         h: estimated moves to goal.
         """
-        step_cost = 0 if move is None else self._step_cost_fn(move, state)
+        step_cost = 0 if move is None else self._default_step_cost(move, state)
         if step_cost < 0:
             raise ValueError("step_cost_fn must return a non-negative integer")
 
         new_g = parent_g + step_cost
-        h = self._combined_heuristic(state)
-        return (new_g + self.heuristic_weight * h, step_cost)
+        remain = self.h_cards_remaining(state)
+        occupied = self.h_occupied_freecells(state)
+        disorder = self.h_disorder(state)
+        h = remain + occupied + disorder
+        return (new_g + 2 * h, step_cost)
 
     @staticmethod
     def _default_step_cost(move: RawMove, state: PackedState) -> int:
@@ -102,8 +78,6 @@ class AstarSolver(BestFSSolver):
         empty_freecells = state.freecell_count_empty()
         return float(state.freecell_slot_count - empty_freecells)
     
-    def h_empty_columns(self, state: PackedState) -> float:
-        return float(state.cascade_count_empty())
     
     def h_disorder(self, state: PackedState) -> float:
         return float(self._calculate_disorder(state))
@@ -145,31 +119,6 @@ class AstarSolver(BestFSSolver):
                     break 
         
         return float(extra_moves)
-
-    def h_next_to_foundation(self, state: PackedState) -> float:
-        from ..core.card import SUITS, SUIT_TO_INDEX, Card, card_to_code
-
-        # Next needed cards for each suit
-        targets = set()
-        for suit in SUITS:
-            suit_idx = SUIT_TO_INDEX[suit]
-            current_rank = state.foundation_rank(suit_idx)
-            if current_rank < 13:
-                next_rank = current_rank + 1
-                targets.add(card_to_code(Card(next_rank, suit)))
-
-        # Check if any target is already movable to foundation from cascade tops or freecell
-        for c_idx in range(state.cascade_count):
-            length = state.cascade_length(c_idx)
-            if length > 0 and state.cascade_card_code(c_idx, length - 1) in targets:
-                return -100.0
-
-        for fc_idx in range(state.freecell_slot_count):
-            fc_code = state.freecell(fc_idx)
-            if fc_code != 63 and fc_code in targets:
-                return -100.0
-
-        return 0.0
 
     def _calculate_disorder(self, state: PackedState) -> int:
         total_disorder = 0
