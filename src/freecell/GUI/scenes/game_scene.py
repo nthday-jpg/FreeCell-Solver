@@ -358,7 +358,7 @@ class GameScene(BaseScene):
             self.solver_running = True
             self.show_solver_popup = False
             self._set_message(f"Started solver: {solver_name}...")
-        elif clicked == "Quit":
+        elif quit_rect.collidepoint(clicked_pos):
             self.solver_worker.stop()
             self.show_solver_popup = False
             self.solver_dropdown_expanded = False
