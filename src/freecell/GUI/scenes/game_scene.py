@@ -107,8 +107,7 @@ class GameScene(BaseScene):
             self.audio.play_music("menu")
             return
         if button == "Restart":
-            self.seed = random.randint(1, 1_000_000)
-            self.session = GameSession.from_seed(self.seed)
+            self.session.restart()
             self.selected_source = None
             self.solver_solution = ()
             self.solver_solution_index = 0
@@ -116,6 +115,7 @@ class GameScene(BaseScene):
             self.auto_run_solution = False
             # If user restarted after winning (win music is playing), switch back.
             self.audio.play_music("game")
+            self._set_message("Game restarted.")
             return
         if button == "Undo":
             if self.session.undo():
