@@ -1,3 +1,4 @@
+import random
 import pygame
 from freecell.GUI.scenes.base_scene import BaseScene
 from freecell.GUI.core.constants import BG_COLOR, TEXT_COLOR, ERROR_COLOR, SUCCESS_COLOR, WARN_COLOR, SOLVER_MAX_EXPANSIONS, WINDOW_SIZE, BUTTON_BG, CASCADE_OFFSET
@@ -10,7 +11,7 @@ from freecell.core.card import SUITS
 class GameScene(BaseScene):
     def __init__(self, screen, assets, audio, settings, change_scene):
         super().__init__(screen, assets, audio, settings, change_scene)
-        self.seed = 1
+        self.seed = random.randint(1, 1_000_000)
         self.session = GameSession.from_seed(self.seed)
         self.selected_source: tuple[str, int] | None = None
         self.drag_count = 1
@@ -21,7 +22,7 @@ class GameScene(BaseScene):
         self.solver_solution_index = 0
         self.solver_running = False
         self.show_solver_popup = False
-        self.solver_choices = ["BFS", "UCS", "IDS", "A*"]
+        self.solver_choices = ["BFS", "UCS", "DFS", "A*"]
         self.solver_dropdown_expanded = False
         try:
             self.solver_choice_index = self.solver_choices.index(self.settings.preferred_solver)
@@ -106,14 +107,15 @@ class GameScene(BaseScene):
             self.audio.play_music("menu")
             return
         if button == "Restart":
-            self.session.restart()
+            self.seed = random.randint(1, 1_000_000)
+            self.session = GameSession.from_seed(self.seed)
             self.selected_source = None
             self.solver_solution = ()
             self.solver_solution_index = 0
             self.solver_worker.stop()
+            self.auto_run_solution = False
             # If user restarted after winning (win music is playing), switch back.
             self.audio.play_music("game")
-            self._set_message("Game restarted.")
             return
         if button == "Undo":
             if self.session.undo():
