@@ -4,6 +4,10 @@ from pathlib import Path
 from statistics import mean
 from joblib import Parallel, delayed
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
@@ -164,8 +168,60 @@ def save_csv_report(data: dict, seeds: list[int]):
 # 3. PLOTTING FUNCTIONS
 # ==========================================
 
+def _draw_scatter(x_data, y_data, x_label, y_label, title, out_path, use_log_x=False, draw_trendline=False):
+    if not x_data or not y_data:
+        return
+        
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.scatter(x_data, y_data, color='#1f77b4', edgecolors='black', alpha=0.7)
+    
+    if draw_trendline and len(x_data) > 1 and np is not None:
+        try:
+            x_arr = np.array(x_data)
+            y_arr = np.array(y_data)
+            if use_log_x:
+                valid = x_arr > 0
+                x_arr = x_arr[valid]
+                y_arr = y_arr[valid]
+                if len(x_arr) > 1:
+                    # Check if x_arr has at least 2 distinct values to avoid Singular Matrix / polyfit hang
+                    if len(np.unique(x_arr)) > 1:
+                        x_fit = np.log10(x_arr)
+                        z = np.polyfit(x_fit, y_arr, 1)
+                        p = np.poly1d(z)
+                        
+                        # Generate points for the line
+                        x_seq = np.logspace(np.log10(min(x_arr)), np.log10(max(x_arr)), 100)
+                        ax.plot(x_seq, p(np.log10(x_seq)), "r--", linewidth=2, label="Trendline")
+                        ax.legend()
+                    else:
+                        print(f"  [i] Bỏ qua Trendline cho {title} vì mọi điểm X đều trùng nhau.")
+            else:
+                if len(np.unique(x_arr)) > 1:
+                    z = np.polyfit(x_arr, y_arr, 1)
+                    p = np.poly1d(z)
+                    x_seq = np.linspace(min(x_arr), max(x_arr), 100)
+                    ax.plot(x_seq, p(x_seq), "r--", linewidth=2, label="Trendline")
+                    ax.legend()
+                else:
+                    print(f"  [i] Bỏ qua Trendline cho {title} vì mọi điểm X đều trùng nhau.")
+        except Exception as e:
+            print(f"  [!] Could not draw trendline for {title}: {e}")
+            
+    if use_log_x:
+        ax.set_xscale('log')
+        
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    print(f"[+] Scatter plot saved to '{out_path}'")
+
+
 def plot_solve_rate_chart(data: dict, seeds: list[int]):
-    import matplotlib.pyplot as plt
     solvers = list(data.keys())
     solve_rates = [(data[s]["solved"] / len(seeds)) * 100 for s in solvers]
 
@@ -186,8 +242,6 @@ def plot_solve_rate_chart(data: dict, seeds: list[int]):
 
 
 def plot_average_bar_charts(data: dict, seeds: list[int], max_expansions: int):
-    import matplotlib.pyplot as plt
-
     solvers = list(data.keys())
     avg_times = [mean(data[s]["times"]) for s in solvers]
     avg_nodes = [mean(data[s]["expansions"]) for s in solvers]
@@ -244,7 +298,7 @@ def plot_average_bar_charts(data: dict, seeds: list[int], max_expansions: int):
 
 
 def plot_scatter_for_algorithm(alg_name: str, alg_data: dict):
-    import matplotlib.pyplot as plt
+    from pathlib import Path
     
     valid_moves = []
     valid_nodes = []
@@ -254,29 +308,63 @@ def plot_scatter_for_algorithm(alg_name: str, alg_data: dict):
             valid_moves.append(moves)
             valid_nodes.append(nodes)
             
+    safe_name = alg_name.replace("*", "star")
+    
+    # 1. Original Scatter: Solution Length vs Nodes
     fig, ax = plt.subplots(figsize=(6, 5))
     if valid_moves:
         ax.scatter(valid_moves, valid_nodes, color='#1f77b4', edgecolors='black', alpha=0.7)
         ax.set_xlabel('Solution Length (Moves)')
         ax.set_ylabel('Expanded Nodes')
-        ax.set_yscale('log') # Add log scale to scatter nodes for better variation visually
-        ax.set_title(f'{alg_name}: Solution Length vs Expanded Nodes (Log)')
+        ax.set_yscale('log')
+        ax.set_title(f'{alg_name}: Solution Length vs Expanded Nodes (Log Y)')
         ax.grid(True, linestyle='--', alpha=0.5)
     else:
         ax.text(0.5, 0.5, f"No solutions found for {alg_name}", ha='center', va='center', fontsize=12)
         ax.set_title(f'{alg_name}: Solution Length vs Expanded Nodes')
         
     plt.tight_layout()
-    safe_name = alg_name.replace("*", "star")
     out_path = Path(f"tests/{safe_name}_scatter.png")
     plt.savefig(out_path, dpi=300)
     plt.close()
-    print(f"[+] Scatter plot for {alg_name} saved to '{out_path}'")
+    print(f"[+] Original scatter plot for {alg_name} saved to '{out_path}'")
+
+    # Correlation Scatters using all data runs
+    all_nodes = alg_data["expansions"]
+    all_times = alg_data["times"]
+    all_memories = [m / (1024 * 1024) for m in alg_data["memories"]]
+    
+    # 2. X: Nodes(log), Y: Time (No Trend)
+    _draw_scatter(
+        all_nodes, all_times, 'Expanded Nodes (Log X)', 'Search Time (s)', 
+        f'{alg_name}: Nodes vs Search Time', Path(f"tests/{safe_name}_nodes_time_scatter.png"), 
+        use_log_x=True, draw_trendline=False
+    )
+    
+    # 3. X: Nodes(log), Y: Time (With Trend)
+    _draw_scatter(
+        all_nodes, all_times, 'Expanded Nodes (Log X)', 'Search Time (s)', 
+        f'{alg_name}: Nodes vs Search Time (Trend)', Path(f"tests/{safe_name}_nodes_time_scatter_trend.png"), 
+        use_log_x=True, draw_trendline=True
+    )
+    
+    # 4. X: Nodes(log), Y: Memory (No Trend)
+    _draw_scatter(
+        all_nodes, all_memories, 'Expanded Nodes (Log X)', 'Peak Memory (MB)', 
+        f'{alg_name}: Nodes vs Peak Memory', Path(f"tests/{safe_name}_nodes_memory_scatter.png"), 
+        use_log_x=True, draw_trendline=False
+    )
+    
+    # 5. X: Nodes(log), Y: Memory (With Trend)
+    _draw_scatter(
+        all_nodes, all_memories, 'Expanded Nodes (Log X)', 'Peak Memory (MB)', 
+        f'{alg_name}: Nodes vs Peak Memory (Trend)', Path(f"tests/{safe_name}_nodes_memory_scatter_trend.png"), 
+        use_log_x=True, draw_trendline=True
+    )
 
 
 def plot_boxplots_per_algorithm(alg_name: str, alg_data: dict):
     """VER 1: 1 algorithm -> 1 image (containing 4 metric subplots)"""
-    import matplotlib.pyplot as plt
     
     times = alg_data["times"]
     memories = [m / (1024 * 1024) for m in alg_data["memories"]]
@@ -313,7 +401,6 @@ def plot_boxplots_per_algorithm(alg_name: str, alg_data: dict):
 
 
 def _draw_metric_boxplot(metric_name, data_lists, labels, use_log, y_label, color, filename):
-    import matplotlib.pyplot as plt
     if not data_lists:
         return
         
@@ -362,14 +449,88 @@ def plot_boxplots_per_metric(data: dict):
 # 4. MAIN ORCHESTRATION
 # ==========================================
 
+def print_summary_tables(data: dict):
+    rows = []
+    for alg, alg_data in data.items():
+        for i in range(len(alg_data["times"])):
+            rows.append({
+                "Algorithm": alg,
+                "Solved": alg_data["statuses"][i] == "Solved",
+                "Nodes": alg_data["expansions"][i],
+                "Time (s)": alg_data["times"][i],
+                "Memory (MB)": alg_data["memories"][i] / (1024 * 1024),
+                "Moves": alg_data["move_counts"][i] if alg_data["move_counts"][i] is not None else pd.NA,
+                "True_Cost": alg_data["move_counts"][i] if alg_data["move_counts"][i] is not None else pd.NA
+            })
+            
+    df = pd.DataFrame(rows)
+    
+    output_lines = []
+    
+    # --- Bảng 1 ---
+    output_lines.append("="*110)
+    output_lines.append(" Bảng 1: Hiệu suất và Tiêu thụ tài nguyên (Efficiency & Resource Usage)")
+    output_lines.append("="*110)
+    
+    table1_rows = []
+    for alg in df['Algorithm'].unique():
+        g = df[df['Algorithm'] == alg]
+        table1_rows.append({
+            'Algorithm': alg,
+            'Success Rate': f"{(g['Solved'].mean() * 100):.1f}%",
+            'Avg. Expanded Nodes': round(g['Nodes'].mean(), 1),
+            'Max Expanded Nodes': g['Nodes'].max(),
+            'Avg. Time (s)': round(g['Time (s)'].mean(), 4),
+            'Avg. Peak Memory (MB)': round(g['Memory (MB)'].mean(), 2),
+            'Max Peak Memory (MB)': round(g['Memory (MB)'].max(), 2),
+        })
+    table1_df = pd.DataFrame(table1_rows).set_index('Algorithm')
+    output_lines.append(table1_df.to_string())
+    output_lines.append("")
+    
+    # --- Bảng 2 ---
+    output_lines.append("="*110)
+    output_lines.append(" Bảng 2: Chất lượng Lời giải (Solution Quality) - Chỉ tính ca Solved")
+    output_lines.append("="*110)
+    
+    table2_rows = []
+    for alg in df['Algorithm'].unique():
+        g = df[df['Algorithm'] == alg]
+        total = len(g)
+        solved = g['Solved'].sum()
+        if solved == 0:
+            table2_rows.append({
+                'Algorithm': alg,
+                'Solved Cases': f"{solved}/{total}",
+                'Min Moves': "N/A", 'Avg. Moves': "N/A", 'Max Moves': "N/A",
+                'Avg. True Cost': "N/A", 'Max True Cost': "N/A"
+            })
+        else:
+            sol = g[g['Solved']]
+            table2_rows.append({
+                'Algorithm': alg,
+                'Solved Cases': f"{solved}/{total}",
+                'Min Moves': int(sol['Moves'].min()),
+                'Avg. Moves': round(sol['Moves'].mean(), 1),
+                'Max Moves': int(sol['Moves'].max()),
+                'Avg. True Cost': round(sol['True_Cost'].mean(), 1),
+                'Max True Cost': int(sol['True_Cost'].max())
+            })
+    table2_df = pd.DataFrame(table2_rows).set_index('Algorithm')
+    output_lines.append(table2_df.to_string())
+    output_lines.append("="*110 + "\n")
+    
+    # Output to console and save to text file
+    final_output = "\n".join(output_lines)
+    print(f"\n{final_output}")
+    
+    out_path = Path("tests/summary_tables.txt")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(final_output)
+    print(f"[+] Summary tables saved to '{out_path}' for easy copy-pasting.")
+
+
 def execute_chart_generation(data: dict, seeds: list[int], max_expansions: int):
-    try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("\n[!] matplotlib is not installed. Skipping plot generation.")
-        print("[!] To generate plots, run: pip install matplotlib")
-        return
-        
     print("\n--- Generating Plots ---")
     
     # 1. Average Bar Charts (The Original 4 pane)
@@ -398,7 +559,7 @@ def main():
     
     data = {}
     data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
-    data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
+    # data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
     data["DFS"] = evaluate_solver(DFSSolver, "DFS", seeds, max_expansions)
     data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
     data["A*"] = evaluate_solver(
@@ -416,6 +577,7 @@ def main():
     )
     
     save_csv_report(data, seeds)
+    print_summary_tables(data)
     execute_chart_generation(data, seeds, max_expansions)
 
 if __name__ == "__main__":
