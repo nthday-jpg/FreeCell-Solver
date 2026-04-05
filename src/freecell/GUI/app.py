@@ -36,9 +36,11 @@ class FreeCellApp:
                 self.screen, self.assets, self.audio, self.settings, self.change_scene
             )
         elif scene_name == "game":
-                self.active_scene = GameScene(
+            self.active_scene = GameScene(
                 self.screen, self.assets, self.audio, self.settings, self.change_scene
             )
+            # When entering the game screen, play the in-game music.
+            self.audio.play_music("game")
 
     def run(self) -> None:
         self.audio.play_music("menu")

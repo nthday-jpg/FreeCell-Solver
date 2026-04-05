@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import pygame
 from freecell.GUI.core.settings import GuiSettings
 
@@ -6,15 +7,9 @@ class AudioManager:
     def __init__(self, settings: GuiSettings) -> None:
         self.settings = settings
         self.assets_dir = Path(__file__).resolve().parent.parent / "assets"
-        self.music_tracks = {
-            "menu": self.assets_dir / "menu_music.ogg",
-            "game": self.assets_dir / "game_music.ogg",
-            "win": self.assets_dir / "win_music.ogg",
-        }
-        self.sfx_tracks = {
-            "move_ok": self.assets_dir / "move_ok.wav",
-            "move_fail": self.assets_dir / "move_fail.wav",
-        }
+        self._audio_root: Path | None = None
+        self.music_tracks: dict[str, Path] = {}
+        self.sfx_tracks: dict[str, Path] = {}
         self.sfx_cache: dict[str, pygame.mixer.Sound] = {}
         self.current_music = ""
         self.enabled = False
@@ -26,10 +21,54 @@ class AudioManager:
 
         self.apply_settings()
 
+    def _resolve_audio_root(self) -> Path:
+        candidate = self.settings.external_audio_dir.strip()
+        if candidate:
+            path = Path(candidate).expanduser()
+            if path.exists() and path.is_dir():
+                return path
+
+        env_path = os.environ.get("FREECELL_AUDIO_DIR", "").strip()
+        if env_path:
+            path = Path(env_path).expanduser()
+            if path.exists() and path.is_dir():
+                return path
+
+        return self.assets_dir
+
+    def _build_track_maps(self, root: Path) -> None:
+        # Support both layouts:
+        # - root/menu_music.ogg (older layout)
+        # - root/music/menu_music.ogg (your current layout)
+        music_dir = root / "music"
+        if music_dir.exists() and music_dir.is_dir():
+            music_root = music_dir
+        else:
+            music_root = root
+
+        self.music_tracks = {
+            "menu": music_root / "menu_music.ogg",
+            "game": music_root / "game_music.ogg",
+            "win": music_root / "win_music.ogg",
+        }
+        self.sfx_tracks = {
+            "move_ok": root / "move_ok.wav",
+            "move_fail": root / "move_fail.wav",
+        }
+
     def apply_settings(self) -> None:
         if not self.enabled:
             return
-        volume = 0.0 if self.settings.music_muted else max(0.0, min(1.0, self.settings.music_volume))
+
+        root = self._resolve_audio_root()
+        if self._audio_root != root:
+            self._audio_root = root
+            self._build_track_maps(root)
+            self.sfx_cache.clear()
+            self.current_music = ""
+
+        music_ratio = max(0.0, min(100.0, float(self.settings.music_volume))) / 100.0
+        volume = 0.0 if self.settings.music_muted else music_ratio
         pygame.mixer.music.set_volume(volume)
 
     def play_music(self, key: str) -> None:
@@ -58,5 +97,6 @@ class AudioManager:
             except pygame.error:
                 return
             self.sfx_cache[key] = sound
-        sound.set_volume(max(0.0, min(1.0, self.settings.sfx_volume)))
+        sfx_ratio = max(0.0, min(100.0, float(self.settings.sfx_volume))) / 100.0
+        sound.set_volume(sfx_ratio)
         sound.play()

@@ -10,6 +10,7 @@ from freecell.core import Move, PackedState
 from freecell.solvers.Astar import AstarSolver
 from freecell.solvers.BFS import BFSSolver
 from freecell.solvers.UCS import UCSSolver
+from freecell.solvers.DFS import DFSSolver
 
 
 def _solve_target(
@@ -21,9 +22,13 @@ def _solve_target(
     started = perf_counter()
     name = solver_name.upper()
     if name == "BFS":
-        solver = BFSSolver()
+        solver = BFSSolver(max_expansions=max_expansions)
+    elif name == "DFS":
+        solver = DFSSolver(max_expansions=max_expansions)
     elif name in ("ASTAR", "A*"):
         solver = AstarSolver(max_expansions=max_expansions)
+    elif name == "UCS":
+        solver = UCSSolver(max_expansions=max_expansions)
     else:
         solver = UCSSolver(max_expansions=max_expansions)
 

@@ -1,7 +1,8 @@
 {
-  "music_volume": 0.435,
-  "sfx_volume": 0.635,
+  "music_volume": 0,
+  "sfx_volume": 0,
   "music_muted": false,
   "sfx_muted": false,
-  "preferred_solver": "A*"
+  "preferred_solver": "BFS",
+  "external_audio_dir": ""
 }
