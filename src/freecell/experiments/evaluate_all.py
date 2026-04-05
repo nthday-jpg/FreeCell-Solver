@@ -1,8 +1,8 @@
 import sys
-import argparse
+import os
 from pathlib import Path
-from time import perf_counter
 from statistics import mean
+from joblib import Parallel, delayed
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
@@ -15,14 +15,79 @@ from freecell.solvers.IDS import IDSSolver
 from freecell.solvers.DFS import DFSSolver
 from freecell.solvers.UCS import UCSSolver
 from freecell.solvers.Astar import AstarSolver
+from freecell.core.rules import is_descending_alternating_codes
 
 COLORS = ['#03045E', '#023E8A', '#0077B6', '#0096C7', '#48CAE4']
+
+
+# ==========================================
+# 0. CONFIGURATION (edit directly)
+# ==========================================
+START_SEED = 1
+SEED_COUNT = 50
+MAX_EXPANSIONS = 100_000
+N_JOBS = -1
+
+
+def h_cards_remaining(state):
+    return float(state.cards_remaining())
+
+
+def h_occupied_freecells(state):
+    empty_freecells = state.freecell_count_empty()
+    return float(state.freecell_slot_count - empty_freecells)
+
+
+def h_disorder(state):
+    total_disorder = 0
+    for c_idx in range(state.cascade_count):
+        length = state.cascade_length(c_idx)
+        if length <= 1:
+            continue
+        cards = state.cascade_tail_codes(c_idx, length)
+        for i in range(length - 1):
+            if not is_descending_alternating_codes(cards[i : i + 2]):
+                total_disorder += (length - i - 1)
+                break
+    return float(total_disorder)
 
 # ==========================================
 # 1. SOLVER EVALUATION
 # ==========================================
 
-def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expansions: int):
+def _evaluate_seed(solver_factory, seed: int, max_expansions: int) -> dict:
+    init = GameState(deal_cascades(seed)).to_packed()
+    solver = solver_factory()
+    if hasattr(solver, "max_expansions"):
+        solver.max_expansions = max_expansions
+
+    # Disable tracemalloc in batch runs to reduce overhead.
+    res = solver.timed_solve(init, trace_peak_memory=False)
+
+    mem_mb = res.peak_memory_usage / (1024 * 1024)
+    if res.solved:
+        status = "Solved"
+        move_count = res.move_count
+    elif res.expanded_nodes >= max_expansions:
+        status = "Hit Limit"
+        move_count = None
+    else:
+        status = "OOM/Timeout"
+        move_count = None
+
+    return {
+        "seed": seed,
+        "elapsed_seconds": res.elapsed_seconds,
+        "expanded_nodes": res.expanded_nodes,
+        "peak_memory_usage": res.peak_memory_usage,
+        "mem_mb": mem_mb,
+        "solved": res.solved,
+        "move_count": move_count,
+        "status": status,
+    }
+
+
+def evaluate_solver(solver_factory, solver_name: str, seeds: list[int], max_expansions: int):
     results = {
         "solved": 0,
         "times": [],
@@ -32,37 +97,39 @@ def evaluate_solver(solver_class, solver_name: str, seeds: list[int], max_expans
         "statuses": []
     }
     print(f"\n[{solver_name}] Testing {len(seeds)} problems (Limits: {max_expansions} expansions)")
-    
-    for s in seeds:
+
+    rows = Parallel(n_jobs=N_JOBS, backend="loky")(
+        delayed(_evaluate_seed)(solver_factory, s, max_expansions) for s in seeds
+    )
+
+    for row in sorted(rows, key=lambda r: r["seed"]):
+        s = row["seed"]
         print(f"  -> seed={s:02d} | ", end="", flush=True)
-        init = GameState(deal_cascades(s)).to_packed()
-        
-        solver = solver_class()
-        if hasattr(solver, "max_expansions"):
-            solver.max_expansions = max_expansions
-            
-        # Use timed_solve to capture peak memory via tracemalloc
-        res = solver.timed_solve(init)
-        
-        results["times"].append(res.elapsed_seconds)
-        results["expansions"].append(res.expanded_nodes)
-        results["memories"].append(res.peak_memory_usage)
-        
-        mem_mb = res.peak_memory_usage / (1024 * 1024)
-        
-        if res.solved:
+
+        results["times"].append(row["elapsed_seconds"])
+        results["expansions"].append(row["expanded_nodes"])
+        results["memories"].append(row["peak_memory_usage"])
+        results["statuses"].append(row["status"])
+
+        if row["solved"]:
             results["solved"] += 1
-            results["move_counts"].append(res.move_count)
-            results["statuses"].append("Solved")
-            print(f"SOLVED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB \tmoves={res.move_count}")
-        elif res.expanded_nodes >= max_expansions:
+            results["move_counts"].append(row["move_count"])
+            print(
+                f"SOLVED: \ttime={row['elapsed_seconds']:.3f}s \tnodes={row['expanded_nodes']} "
+                f"\tmem={row['mem_mb']:.2f}MB \tmoves={row['move_count']}"
+            )
+        elif row["status"] == "Hit Limit":
             results["move_counts"].append(None)
-            results["statuses"].append("Hit Limit")
-            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB (Hit Limit)")
+            print(
+                f"FAILED: \ttime={row['elapsed_seconds']:.3f}s \tnodes={row['expanded_nodes']} "
+                f"\tmem={row['mem_mb']:.2f}MB (Hit Limit)"
+            )
         else:
             results["move_counts"].append(None)
-            results["statuses"].append("OOM/Timeout")
-            print(f"FAILED: \ttime={res.elapsed_seconds:.3f}s \tnodes={res.expanded_nodes} \tmem={mem_mb:.2f}MB (OOM/Timeout/Exhausted)")
+            print(
+                f"FAILED: \ttime={row['elapsed_seconds']:.3f}s \tnodes={row['expanded_nodes']} "
+                f"\tmem={row['mem_mb']:.2f}MB (OOM/Timeout/Exhausted)"
+            )
             
     return results
 
@@ -321,25 +388,32 @@ def execute_chart_generation(data: dict, seeds: list[int], max_expansions: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate all search algorithms.")
-    parser.add_argument("--start", type=int, default=1, help="Starting seed number")
-    parser.add_argument("--count", type=int, default=10, help="Number of seeds to test")
-    parser.add_argument("--limit", type=int, default=50000, help="Max expansions per algorithm per seed")
-    args = parser.parse_args()
-
-    seeds = list(range(args.start, args.start + args.count))
-    max_expansions = args.limit
+    seeds = list(range(START_SEED, START_SEED + SEED_COUNT))
+    max_expansions = MAX_EXPANSIONS
     
     print("=" * 60)
     print(" FREECELL SOLVER MASS BENCHMARK SUITE")
     print("=" * 60)
+    print(f"Config: start_seed={START_SEED}, seed_count={SEED_COUNT}, max_expansions={MAX_EXPANSIONS}, n_jobs={N_JOBS}")
     
     data = {}
     data["BFS"] = evaluate_solver(BFSSolver, "BFS", seeds, max_expansions)
     data["IDS"] = evaluate_solver(IDSSolver, "IDS", seeds, max_expansions)
     data["DFS"] = evaluate_solver(DFSSolver, "DFS", seeds, max_expansions)
     data["UCS"] = evaluate_solver(UCSSolver, "UCS", seeds, max_expansions)
-    data["A*"] = evaluate_solver(lambda: AstarSolver(), "A*", seeds, max_expansions)
+    data["A*"] = evaluate_solver(
+        lambda: AstarSolver(
+            heuristics=[
+                (h_cards_remaining, 1.0),
+                (h_occupied_freecells, 1.0),
+                (h_disorder, 1.0),
+            ],
+            heuristic_weight=2.0,
+        ),
+        "A*",
+        seeds,
+        max_expansions,
+    )
     
     save_csv_report(data, seeds)
     execute_chart_generation(data, seeds, max_expansions)
