@@ -3,6 +3,6 @@
   "sfx_volume": 0,
   "music_muted": false,
   "sfx_muted": false,
-  "preferred_solver": "BFS",
+  "preferred_solver": "DFS",
   "external_audio_dir": ""
 }
